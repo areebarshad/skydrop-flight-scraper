@@ -1,13 +1,20 @@
 """Hand-rolled protobuf encoder for the Google Flights tfs query parameter.
 
-Field numbers are from public reverse-engineering of the tfs protobuf schema
-and must be verified empirically against a known-good browser URL before
-trusting. fast-flights 3.1.0 source is the cross-check reference.
+Verified against a real browser-decoded tfs for IAD→KHI 2026-12-16 /
+KHI→IAD 2027-01-21, 1 adult, economy, round trip.
 
-Schema sketch:
-  FlightData { date=2(str), from=13(Airport{code=2}), to=14(Airport{code=2}) }
-  Info       { data=3(repeated FlightData), pax=1(varint), seat=9(varint),
-               trip=19(varint 1=round,2=oneway) }
+Confirmed schema (verified against 1-adult and 2-adult round trips):
+  Airport    { 1: varint(1),  2: string(code) }
+  FlightData { 2: string("YYYY-MM-DD"),
+               13: Airport(origin), 14: Airport(destination) }
+  Info       { 1: varint(28),          # constant; unchanged across pax counts
+               2: varint(2),           # constant
+               3: FlightData,          # REPEATED — one field-3 per leg
+               8: varint(1),           # REPEATED — one occurrence per adult
+               9: varint(cabin),       # 1=economy 2=premium_economy 3=business 4=first
+               14: varint(1),          # constant
+               16: { 1: varint(0xFFFFFFFFFFFFFFFF) }, # sentinel
+               19: varint(trip_type) } # 1=round_trip 2=one_way
 """
 from __future__ import annotations
 
@@ -52,39 +59,50 @@ def _field_str(field: int, value: str) -> bytes:
 
 
 def _encode_airport(code: str) -> bytes:
-    return _field_str(2, code)
+    # Field 1 = varint(1) confirmed present in real tfs; field 2 = IATA code.
+    return _field_varint(1, 1) + _field_str(2, code)
 
 
 def _encode_flight_data(d: date, origin: str, destination: str) -> bytes:
-    msg = (
+    return (
         _field_str(2, d.strftime("%Y-%m-%d"))
         + _field_bytes(13, _encode_airport(origin))
         + _field_bytes(14, _encode_airport(destination))
     )
-    return msg
 
 
 def _encode_info(
-    flight_data: bytes,
+    flight_data_list: list[bytes],
     adults: int,
     cabin: CabinClass,
     round_trip: bool,
 ) -> bytes:
     trip_type = 1 if round_trip else 2
+    # Each FlightData is a separate field-3 (repeated field), not one combined blob.
+    fd_encoded = b"".join(_field_bytes(3, fd) for fd in flight_data_list)
+    # Field 8 is repeated once per adult (each occurrence = varint 1).
+    pax_encoded = b"".join(_field_varint(8, 1) for _ in range(adults))
+    field16 = _field_bytes(16, _field_varint(1, 0xFFFFFFFFFFFFFFFF))
     return (
-        _field_varint(1, adults)
-        + _field_bytes(3, flight_data)
+        _field_varint(1, 28)       # constant
+        + _field_varint(2, 2)      # constant
+        + fd_encoded               # repeated field 3: one per FlightData
+        + pax_encoded              # repeated field 8: one per adult
         + _field_varint(9, _CABIN_MAP[cabin])
+        + _field_varint(14, 1)     # constant
+        + field16                  # sentinel sub-message
         + _field_varint(19, trip_type)
     )
 
 
 def encode(query: SearchQuery) -> str:
     """Return base64url-encoded tfs parameter (no padding) for the given query."""
-    fd = _encode_flight_data(query.depart_date, query.origin, query.destination)
+    flights = [_encode_flight_data(query.depart_date, query.origin, query.destination)]
     if query.return_date is not None:
-        fd += _encode_flight_data(query.return_date, query.destination, query.origin)
-    info = _encode_info(fd, query.adults, query.cabin, query.return_date is not None)
+        flights.append(
+            _encode_flight_data(query.return_date, query.destination, query.origin)
+        )
+    info = _encode_info(flights, query.adults, query.cabin, query.return_date is not None)
     return base64.urlsafe_b64encode(info).rstrip(b"=").decode()
 
 
