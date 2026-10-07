@@ -1,0 +1,20 @@
+FLIGHT DIGEST: {{ ranked.query.origin }}→{{ ranked.query.destination }}
+No Tier 1 match. Depart: {{ ranked.query.depart_date }}
+
+{% if ranked.tier2 %}
+BEST ALTERNATIVES (Tier 2)
+{% for m in ranked.tier2 %}
+  ${{ "%.0f"|format(m.option.price_usd) }} | {{ m.option.total_duration_minutes // 60 }}h {{ m.option.total_duration_minutes % 60 }}m | {{ m.labels | join(", ") }}
+  {{ m.tradeoff_note }}
+{% endfor %}
+{% endif %}
+
+{% if ranked.tier3 %}
+BASELINE (Tier 3)
+{% for m in ranked.tier3 %}
+  ${{ "%.0f"|format(m.option.price_usd) }} | {{ m.option.total_duration_minutes // 60 }}h {{ m.option.total_duration_minutes % 60 }}m | {{ m.labels | join(", ") }}
+  {{ m.tradeoff_note }}
+{% endfor %}
+{% endif %}
+
+Budget: ${{ ranked.query.constraints.max_price_usd }}{% if ranked.query.constraints.max_duration_minutes %} | Max: {{ ranked.query.constraints.max_duration_minutes // 60 }}h{% endif %} | {{ ranked.total_candidates }} candidates

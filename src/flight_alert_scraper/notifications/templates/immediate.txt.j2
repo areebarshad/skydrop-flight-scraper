@@ -1,0 +1,22 @@
+FLIGHT ALERT: {{ ranked.query.origin }}→{{ ranked.query.destination }}
+Depart: {{ ranked.query.depart_date }}{% if ranked.query.return_date %} | Return: {{ ranked.query.return_date }}{% endif %}
+
+{% if ranked.tier1 %}
+TIER 1 — DIRECT MATCHES
+{% for m in ranked.tier1 %}
+  ${{ "%.0f"|format(m.option.price_usd) }} | {{ m.option.total_duration_minutes // 60 }}h {{ m.option.total_duration_minutes % 60 }}m | {{ m.option.stops }} stop(s) | {{ m.option.legs[0].carrier }}
+  {{ m.tradeoff_note }}
+  Google: {{ m.option.links.google_search }}
+  Kayak:  {{ m.option.links.kayak_search }}
+{% endfor %}
+{% endif %}
+
+{% if ranked.tier2 %}
+NEAR MISSES (Tier 2)
+{% for m in ranked.tier2 %}
+  ${{ "%.0f"|format(m.option.price_usd) }} | {{ m.option.total_duration_minutes // 60 }}h {{ m.option.total_duration_minutes % 60 }}m | {{ m.labels | join(", ") }}
+  {{ m.tradeoff_note }}
+{% endfor %}
+{% endif %}
+
+Budget: ${{ ranked.query.constraints.max_price_usd }}{% if ranked.query.constraints.max_duration_minutes %} | Max: {{ ranked.query.constraints.max_duration_minutes // 60 }}h{% endif %} | {{ ranked.total_candidates }} candidates

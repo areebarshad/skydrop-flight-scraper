@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: Arial, sans-serif; color: #222; max-width: 600px; margin: 0 auto; }
+  h2 { color: #1a5276; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; font-size: 14px; }
+  th { background: #2e86c1; color: white; }
+  tr:nth-child(even) { background: #f5f5f5; }
+  .tier1 { background: #d5f5e3; }
+  .note { font-size: 12px; color: #555; margin: 8px 0; }
+  .link a { color: #1a5276; }
+</style>
+</head>
+<body>
+<h2>Flight Alert: {{ ranked.query.origin }}→{{ ranked.query.destination }}</h2>
+<p>Depart: <strong>{{ ranked.query.depart_date }}</strong>
+{% if ranked.query.return_date %} | Return: <strong>{{ ranked.query.return_date }}</strong>{% endif %}
+| {{ ranked.query.adults }} adult(s), {{ ranked.query.cabin }}</p>
+
+{% if ranked.tier1 %}
+<h3>✓ Tier 1 — Direct Matches</h3>
+<table>
+  <tr><th>Price</th><th>Duration</th><th>Stops</th><th>Carrier</th><th>Note</th></tr>
+  {% for m in ranked.tier1 %}
+  <tr class="tier1">
+    <td>${{ "%.0f"|format(m.option.price_usd) }}</td>
+    <td>{{ m.option.total_duration_minutes // 60 }}h {{ m.option.total_duration_minutes % 60 }}m</td>
+    <td>{{ m.option.stops }}</td>
+    <td>{{ m.option.legs[0].carrier }}</td>
+    <td>{{ m.tradeoff_note }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% for m in ranked.tier1[:1] %}
+<p class="link">
+  <a href="{{ m.option.links.google_search }}">Search on Google Flights</a> |
+  <a href="{{ m.option.links.kayak_search }}">Search on Kayak</a>
+  {% if m.option.links.airline_direct %} | <a href="{{ m.option.links.airline_direct }}">Airline direct</a>{% endif %}
+</p>
+{% endfor %}
+{% endif %}
+
+{% if ranked.tier2 %}
+<h3>Near Misses (Tier 2)</h3>
+<table>
+  <tr><th>Price</th><th>Duration</th><th>Stops</th><th>Labels</th><th>Note</th></tr>
+  {% for m in ranked.tier2 %}
+  <tr>
+    <td>${{ "%.0f"|format(m.option.price_usd) }}</td>
+    <td>{{ m.option.total_duration_minutes // 60 }}h {{ m.option.total_duration_minutes % 60 }}m</td>
+    <td>{{ m.option.stops }}</td>
+    <td>{{ m.labels | join(", ") }}</td>
+    <td>{{ m.tradeoff_note }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<p class="note">Budget: ${{ ranked.query.constraints.max_price_usd }}
+{% if ranked.query.constraints.max_duration_minutes %} | Max duration: {{ ranked.query.constraints.max_duration_minutes // 60 }}h{% endif %}
+| {{ ranked.total_candidates }} candidates found</p>
+</body>
+</html>

@@ -1,0 +1,15 @@
+queries:
+  - origin: IAD
+    destination: KHI
+    depart_date: "2026-12-01"
+    return_date: null
+    cabin: economy
+    adults: 1
+    constraints:
+      max_price_usd: "1200.00"
+      max_duration_minutes: 1320   # 22 hours
+      max_stops: null
+      value_deal_discount: "0.20"
+      value_deal_duration_buffer_minutes: 180
+      time_saver_price_overage: "0.10"
+      hourly_time_penalty_usd: "20.00"
