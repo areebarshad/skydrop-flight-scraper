@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from selectolax.parser import HTMLParser
+from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
 from flight_alert_scraper.models.flight import BookingLinks, FlightOption, Layover, Leg
 from flight_alert_scraper.models.query import SearchQuery

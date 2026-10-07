@@ -18,19 +18,16 @@ def check(
     watchlist: Optional[Path] = typer.Option(None, "--watchlist", help="Path to watchlist.yaml"),
 ) -> None:
     """Run a check of all watched routes and send alerts if anything changed."""
-    import os
-    import fcntl_compat as _  # noqa — lock file handled below
-
     from flight_alert_scraper import log as _log
     _log.configure()
 
     from flight_alert_scraper.config import Settings
-    kwargs = {}
+    env_overrides: dict[str, object] = {}
     if watchlist:
-        kwargs["watchlist_path"] = watchlist
+        env_overrides["watchlist_path"] = watchlist
     if dry_run:
-        kwargs["dry_run"] = dry_run
-    settings = Settings(**kwargs)
+        env_overrides["dry_run"] = True
+    settings = Settings(**env_overrides)
 
     from flight_alert_scraper.db.engine import get_session, migrate
     migrate(settings.db_path)

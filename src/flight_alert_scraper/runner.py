@@ -65,7 +65,7 @@ def run_query(
         decision.trigger_reason or decision.suppress_reason,
     )
 
-    if decision.should_send and notifier is not None:
+    if decision.should_send:
         subject = render_subject(decision)
         html_body = render_html(decision)
         text_body = render_text(decision)
@@ -73,14 +73,13 @@ def run_query(
             (subject + html_body).encode()
         ).hexdigest()[:32]
 
-        recipient = ""
         from flight_alert_scraper.config import get_settings
         settings = get_settings()
         recipient = settings.alert_recipient
 
         if dry_run:
             _write_preview(subject, html_body, text_body)
-        elif not alert_already_sent(session, payload_hash, query.query_key):
+        elif notifier is not None and not alert_already_sent(session, payload_hash, query.query_key):
             try:
                 notifier.send(recipient, subject, html_body, text_body)
                 log_alert(
@@ -147,7 +146,7 @@ def _write_preview(subject: str, html_body: str, text_body: str) -> None:
     preview_dir = Path("artifacts/preview")
     preview_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    (preview_dir / f"{ts}_subject.txt").write_text(subject)
-    (preview_dir / f"{ts}_email.html").write_text(html_body)
-    (preview_dir / f"{ts}_email.txt").write_text(text_body)
+    (preview_dir / f"{ts}_subject.txt").write_text(subject, encoding="utf-8")
+    (preview_dir / f"{ts}_email.html").write_text(html_body, encoding="utf-8")
+    (preview_dir / f"{ts}_email.txt").write_text(text_body, encoding="utf-8")
     log.info("Preview written to %s", preview_dir / f"{ts}_email.html")

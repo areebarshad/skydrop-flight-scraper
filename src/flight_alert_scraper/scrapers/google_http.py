@@ -40,7 +40,9 @@ def _load_cookies() -> dict[str, str]:
 
 def _save_cookies(jar: httpx.Cookies) -> None:
     _COOKIE_JAR.parent.mkdir(parents=True, exist_ok=True)
-    data = {k: v for k, v in jar.items()}
+    data: dict[str, str] = {}
+    for cookie in jar.jar:  # iterate the underlying http.cookiejar.CookieJar
+        data[cookie.name] = cookie.value
     _COOKIE_JAR.write_text(json.dumps(data))
 
 
