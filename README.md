@@ -466,35 +466,101 @@ Providers are tried in order. If a provider fails or returns no usable data, the
 
 ## ⏰ Automating with Windows Task Scheduler
 
-### Register the task (run every 6 hours starting at 06:00)
+Run checks automatically in the background every 6 hours — no terminal popups, no manual triggering.
 
-```bat
-schtasks /create ^
-  /tn "FlightAlertScraper" ^
-  /tr "cmd /c cd C:\Users\arsha\OneDrive\Documents\flight_scraper\flight-alert-scraper && uv run flight-alert-scraper check" ^
-  /sc hourly /mo 6 ^
-  /st 06:00 ^
-  /f
+### Step 1 — Register the base task
+
+Open **PowerShell** and run (adjust the path to your project root):
+
+```powershell
+schtasks /create /tn "FlightAlertScraper" `
+  /tr "cmd /c cd /d C:\Users\arsha\OneDrive\Documents\flight_scraper\flight-alert-scraper && uv run flight-alert-scraper check" `
+  /sc hourly /mo 6 /st 06:00 /f
 ```
 
-> **Tip:** Replace the path after `cd` with the actual path to your `flight-alert-scraper` directory if it differs.
+> **Note:** The `/d` flag in `cd /d` is required when the project is on a different drive than `cmd`'s current directory. Without it, a drive change silently fails and the task errors every run.
 
-### Trigger it manually to test the scheduler environment
+---
 
-```bat
+### Step 2 — Configure power, wake & background settings *(recommended)*
+
+By default, Windows suppresses scheduled tasks when the machine is on battery or the screen is locked. Run the following in **PowerShell as Administrator** to remove those restrictions:
+
+```powershell
+# Allow running on battery; catch up if the machine was asleep at the scheduled time
+$task = Get-ScheduledTask -TaskName "FlightAlertScraper"
+$task.Settings.DisallowStartIfOnBatteries = $false
+$task.Settings.StopIfGoingOnBatteries     = $false
+$task.Settings.StartWhenAvailable         = $true
+Set-ScheduledTask -InputObject $task
+
+# Run in the background whether logged in, locked, or signed out — no plaintext passwords
+$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U
+Set-ScheduledTask -TaskName "FlightAlertScraper" -Principal $principal
+```
+
+| Setting | What it does |
+|---|---|
+| `DisallowStartIfOnBatteries = $false` | Runs checks even when unplugged from AC power |
+| `StopIfGoingOnBatteries = $false` | Won't abort a run mid-way if the charger is unplugged |
+| `StartWhenAvailable = $true` | If the machine was asleep at the 6-hour mark, runs immediately on wake instead of skipping the window |
+| `LogonType = S4U` | Service-for-User background logon — checks continue when the screen is locked, without storing a plaintext password |
+
+---
+
+### Step 3 — Verify the configuration
+
+```powershell
+$t = Get-ScheduledTask -TaskName "FlightAlertScraper"
+[PSCustomObject]@{
+    TaskName       = $t.TaskName
+    State          = $t.State
+    StartOnBattery = -not $t.Settings.DisallowStartIfOnBatteries
+    StopOnBattery  = $t.Settings.StopIfGoingOnBatteries
+    StartWhenAvail = $t.Settings.StartWhenAvailable
+    LogonType      = $t.Principal.LogonType
+}
+```
+
+**Expected output:**
+
+```
+TaskName       : FlightAlertScraper
+State          : Ready
+StartOnBattery : True
+StopOnBattery  : False
+StartWhenAvail : True
+LogonType      : S4U
+```
+
+---
+
+### Step 4 — Test the task manually
+
+Trigger the task and confirm it writes to the database:
+
+```powershell
 schtasks /run /tn "FlightAlertScraper"
 ```
 
+Wait 15–30 seconds, then inspect the run log:
+
+```powershell
+uv run flight-alert-scraper history
+```
+
+---
+
 ### Other useful scheduler commands
 
-```bat
-# Check status / last run result
+```powershell
+# Check status and last run result
 schtasks /query /tn "FlightAlertScraper" /fo LIST /v
 
 # Delete the task
 schtasks /delete /tn "FlightAlertScraper" /f
 
-# Change to every 4 hours
+# Change interval (e.g., every 4 hours)
 schtasks /change /tn "FlightAlertScraper" /mo 4
 ```
 
