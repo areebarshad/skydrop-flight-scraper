@@ -1,6 +1,6 @@
-# ✈️ flight-alert-scraper
+# ✈️ skydrop
 
-> **Stop refreshing Google Flights.** Set your price and time constraints once — get an email only when something worth acting on actually changes.
+> Autonomous flight monitoring that only bothers your inbox when the math checks out.
 
 Monitors flight routes on a schedule, ranks every result into a decision-quality tier, and sends targeted email alerts so you never miss a deal and never get spammed.
 
@@ -690,6 +690,12 @@ flight-alert-scraper/
 ### `uv: command not found`
 
 Install uv: `pip install uv` or follow the [official guide](https://github.com/astral-sh/uv#installation).
+
+---
+
+## Author
+
+Areeb Arshad | Data Science, Statistics, and Mathematics @ Virginia Tech 
 
 ---
 
