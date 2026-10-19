@@ -1,37 +1,132 @@
-# ✈️ skydrop
+<h1 align="center">✈️ skydrop</h1>
 
-> Autonomous flight monitoring that only bothers your inbox when the math checks out.
+<p align="center">
+  <b>Autonomous flight monitoring that only bothers your inbox when the math checks out.</b>
+</p>
 
-Monitors flight routes on a schedule, ranks every result into a decision-quality tier, and sends targeted email alerts so you never miss a deal and never get spammed.
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat&logo=python&logoColor=white" alt="Python 3.12+"/>
+  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-0078D4?style=flat" alt="Platform"/>
+  <img src="https://img.shields.io/badge/License-MIT-green?style=flat" alt="MIT License"/>
+  <img src="https://img.shields.io/badge/Tests-52%20passing-brightgreen?style=flat" alt="52 tests passing"/>
+  <img src="https://img.shields.io/badge/Email-Gmail%20SMTP-EA4335?style=flat&logo=gmail&logoColor=white" alt="Gmail SMTP"/>
+</p>
 
----
-
-## 📋 Table of Contents
-
-- [How It Works](#-how-it-works)
-- [Prerequisites](#-prerequisites)
-- [Installation](#-installation)
-- [Configuration](#-configuration)
-  - [Environment Variables (.env)](#environment-variables-env)
-  - [Watchlist (watchlist.yaml)](#watchlist-watchlistyaml)
-- [Quick Start](#-quick-start)
-- [CLI Reference](#-cli-reference)
-  - [check](#check)
-  - [init-db](#init-db)
-  - [history](#history)
-  - [test-email](#test-email)
-  - [rank](#rank)
-- [Tier System](#-tier-system)
-- [Alert Logic](#-alert-logic)
-- [Data Sources & Fallback Chain](#-data-sources--fallback-chain)
-- [Automating with Windows Task Scheduler](#-automating-with-windows-task-scheduler)
-- [Running Tests](#-running-tests)
-- [Project Layout](#-project-layout)
-- [Troubleshooting](#-troubleshooting)
+<p align="center">
+  Set a budget. Set a deadline. Walk away.<br/>
+  skydrop watches Google Flights around the clock, ranks every result against your constraints, and fires a targeted email alert — only when something genuinely worth acting on appears.
+</p>
 
 ---
 
-## ⚙️ How It Works
+## What it does
+
+Stop refreshing Google Flights manually. skydrop scrapes live flight data on a schedule, runs every result through a three-tier ranking engine, and sends an email only when the state has meaningfully changed. No duplicate alerts. No noise.
+
+| Capability | What you get |
+|---|---|
+| **Three-tier ranking** | Every itinerary sorted into Direct Match, Near Miss, or Baseline — so every email tells you exactly why a flight is worth looking at |
+| **Smart alert logic** | Immediate alert on a new Tier 1 or a price drop ≥ 5%; digest-only (max once per 24 hours) when only near-misses exist; silence otherwise |
+| **Provider fallback chain** | Fast HTTP-only scraper first → headless Chromium if blocked → optional SerpApi — fully automatic, no manual intervention |
+| **Anti-spam guarantee** | SQLite state tracking per route means the same flight never triggers two emails |
+| **Local web dashboard** | Built-in FastAPI dashboard at `localhost:8765` — review tiers, history, and alert state in a browser |
+| **Dry-run preview** | Render the exact email HTML before sending a single real message |
+| **Fully offline tests** | All 52 tests run without network calls or SMTP — safe to run anywhere |
+| **Zero dependencies on paid APIs** | SerpApi is optional; the free tier is fully functional |
+
+---
+
+## How To Use
+
+> **30-second path from install to first alert.**
+
+### 1. Install
+
+```bash
+# Navigate into the project directory
+cd flight-alert-scraper
+
+# Install all dependencies (creates .venv automatically)
+uv sync
+
+# Install the browser automation engine (one-time, ~150 MB)
+uv run patchright install chromium
+```
+
+### 2. Configure credentials
+
+Copy the example env file and fill in your Gmail details:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```dotenv
+SMTP_USER=you@gmail.com
+SMTP_APP_PASSWORD=xxxx xxxx xxxx xxxx   # Google App Password — see below
+ALERT_RECIPIENT=you@example.com
+DB_PATH=./flight_alerts.db
+```
+
+**Generating a Google App Password:**
+1. Go to [myaccount.google.com/security](https://myaccount.google.com/security)
+2. Ensure **2-Step Verification** is enabled
+3. Search for **"App passwords"** and create one (name it anything, e.g. *skydrop*)
+4. Paste the 16-character code into `SMTP_APP_PASSWORD`
+
+### 3. Define your routes
+
+Edit `watchlist.yaml` with the routes you want to watch:
+
+```yaml
+queries:
+  - origin: IAD
+    destination: KHI
+    depart_date: "2026-12-01"
+    cabin: economy
+    adults: 1
+    constraints:
+      max_price_usd: "1200.00"
+      max_duration_minutes: 1320    # 22 hours
+```
+
+### 4. Preview before going live
+
+```bash
+# Initialize the database (only needed once)
+uv run flight-alert-scraper init-db
+
+# Dry run — renders the email to artifacts/preview/ without sending
+uv run flight-alert-scraper check --dry-run
+```
+
+Open `artifacts/preview/<timestamp>_email.html` in a browser to see exactly what recipients will receive.
+
+### 5. Run a live check
+
+```bash
+uv run flight-alert-scraper check
+```
+
+An email fires only if the state has meaningfully changed since the last run. If nothing changed, nothing is sent.
+
+### 6. Automate it
+
+Set up Windows Task Scheduler to run checks every 6 hours — no terminal popups, fully background:
+
+```powershell
+schtasks /create /tn "skydrop" `
+  /tr "cmd /c cd /d C:\path\to\flight-alert-scraper && uv run flight-alert-scraper check" `
+  /sc hourly /mo 6 /st 06:00 /f
+```
+
+See [Automating with Windows Task Scheduler](#-automating-with-windows-task-scheduler) for the full setup including battery, wake, and background logon settings.
+
+---
+
+## How It Works
 
 ```
 watchlist.yaml  ──▶  Scraper Chain  ──▶  Ranking Engine  ──▶  State DB  ──▶  Email
@@ -48,20 +143,38 @@ watchlist.yaml  ──▶  Scraper Chain  ──▶  Ranking Engine  ──▶  
 
 ---
 
-## 🔧 Prerequisites
+## Prerequisites
 
 | Requirement | Version | Notes |
 |---|---|---|
 | **Python** | 3.12+ | Check with `python --version` |
-| **uv** | latest | Fast Python package manager — [install guide](https://github.com/astral-sh/uv) |
+| **uv** | latest | Fast Python package manager — [install guide](https://docs.astral.sh/uv/getting-started/installation/) |
 | **Gmail account** | — | Required for email alerts (App Password needed) |
 | **Google 2FA** | enabled | Required to generate an App Password |
 
-> **Note:** `uv` handles the virtual environment automatically. You do not need to create one manually.
+**Windows quick install:**
+
+```powershell
+winget install astral-sh.uv
+```
+
+**macOS quick install:**
+
+```bash
+brew install uv
+```
+
+**Linux:**
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+> `uv` handles the virtual environment automatically. You do not need to create one manually.
 
 ---
 
-## 📦 Installation
+## Installation
 
 ```bash
 # 1. Navigate into the project directory
@@ -76,17 +189,9 @@ uv run patchright install chromium
 
 ---
 
-## 🔑 Configuration
+## Configuration
 
 ### Environment Variables (`.env`)
-
-Copy the example file and fill in your credentials:
-
-```bash
-cp .env.example .env
-```
-
-Then edit `.env`:
 
 ```dotenv
 # ── Database ──────────────────────────────────────────────────
@@ -101,14 +206,6 @@ ALERT_RECIPIENT=you@example.com      # Where alerts are delivered
 SERPAPI_KEY=                         # SerpApi key — leave blank to disable
 WATCHLIST_PATH=./watchlist.yaml      # Override the default watchlist location
 ```
-
-#### How to generate a Google App Password
-
-1. Go to [myaccount.google.com/security](https://myaccount.google.com/security)
-2. Ensure **2-Step Verification** is enabled
-3. Search for **"App passwords"** in the search bar
-4. Create a new app password (name it anything — e.g., *FlightAlerts*)
-5. Copy the 16-character code (with or without spaces) into `SMTP_APP_PASSWORD`
 
 ---
 
@@ -131,21 +228,15 @@ queries:
       max_stops: null                  # null = any; 0 = nonstop only; 1 = max 1 stop
 
       # ── Tier 2 near-miss thresholds ────────────────────────
-      value_deal_discount: "0.20"      # flight is 20%+ under budget → qualifies as Value Deal
-                                       # even if it exceeds the time limit
-      value_deal_duration_buffer_minutes: 180  # how many minutes over the time limit is still OK
-                                               # for a Value Deal (here: up to 22h + 3h = 25h)
-      time_saver_price_overage: "0.10" # flight is ≤10% over budget → qualifies as Time Saver
-                                       # if it is within the time limit
+      value_deal_discount: "0.20"      # 20%+ under budget → qualifies as Value Deal
+      value_deal_duration_buffer_minutes: 180  # up to 3h over the time limit for a Value Deal
+      time_saver_price_overage: "0.10" # ≤10% over budget → qualifies as Time Saver
 
       # ── Effective-cost weighting ────────────────────────────
-      hourly_time_penalty_usd: "20.00" # $20 per extra hour of travel time added to effective cost
-                                       # used to rank Tier 2 and pick the best-balance Tier 3 option
+      hourly_time_penalty_usd: "20.00" # $20 per extra hour added to effective cost
 ```
 
-#### Multiple routes
-
-Add as many entries as you like under `queries:`:
+**Multiple routes** — add as many entries as you like under `queries:`:
 
 ```yaml
 queries:
@@ -171,24 +262,7 @@ queries:
 
 ---
 
-## 🚀 Quick Start
-
-```bash
-# Step 1 — Initialize the database (only needed once)
-uv run flight-alert-scraper init-db
-
-# Step 2 — Preview results without sending an email
-uv run flight-alert-scraper check --dry-run
-
-# Step 3 — Run a live check and send alerts if anything changed
-uv run flight-alert-scraper check
-```
-
-After `--dry-run`, open `artifacts/preview/<timestamp>_email.html` in a browser to inspect the formatted email before going live.
-
----
-
-## 📟 CLI Reference
+## CLI Reference
 
 All commands follow the form:
 
@@ -211,27 +285,40 @@ uv run flight-alert-scraper check [OPTIONS]
 | `--dry-run` | `False` | Render emails to `artifacts/preview/` instead of sending |
 | `--watchlist PATH` | `./watchlist.yaml` | Override the watchlist file path |
 
-**Examples:**
+```bash
+uv run flight-alert-scraper check                                    # live run
+uv run flight-alert-scraper check --dry-run                          # preview only
+uv run flight-alert-scraper check --watchlist ~/my-routes.yaml       # custom watchlist
+```
+
+---
+
+### `ui`
+
+Start the local web dashboard at `http://127.0.0.1:8765`. Displays tier results, scrape history, and alert state in a browser UI.
+
+```
+uv run flight-alert-scraper ui [OPTIONS]
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--port N` | `8765` | Port to listen on |
+| `--db PATH` | from `.env` | Path to the SQLite file |
+| `--watchlist PATH` | `./watchlist.yaml` | Override the watchlist file path |
+| `--no-browser` | `False` | Don't auto-open the browser on launch |
 
 ```bash
-# Live run — emails fire if state changed
-uv run flight-alert-scraper check
-
-# Preview mode — no emails sent, HTML written to artifacts/preview/
-uv run flight-alert-scraper check --dry-run
-
-# Use a custom watchlist
-uv run flight-alert-scraper check --watchlist ~/my-routes.yaml
-
-# Preview with a custom watchlist
-uv run flight-alert-scraper check --dry-run --watchlist ./test-watchlist.yaml
+uv run flight-alert-scraper ui                      # open dashboard at localhost:8765
+uv run flight-alert-scraper ui --port 9000          # custom port
+uv run flight-alert-scraper ui --no-browser         # headless (server mode)
 ```
 
 ---
 
 ### `init-db`
 
-Creates the SQLite database and applies the current schema. **Safe to run multiple times** — it migrates without destroying data.
+Creates the SQLite database and applies the current schema. Safe to run multiple times — migrates without destroying data.
 
 ```
 uv run flight-alert-scraper init-db [OPTIONS]
@@ -241,13 +328,8 @@ uv run flight-alert-scraper init-db [OPTIONS]
 |---|---|---|
 | `--db PATH` | `./flight_alerts.db` | Path to the SQLite file |
 
-**Examples:**
-
 ```bash
-# Use the default path from .env
 uv run flight-alert-scraper init-db
-
-# Use a custom database path
 uv run flight-alert-scraper init-db --db /data/flights.db
 ```
 
@@ -278,27 +360,17 @@ uv run flight-alert-scraper history [QUERY_KEY] [OPTIONS]
 | **T1 / T2** | Count of Tier 1 and Tier 2 matches found |
 | **Suppressed** | Reason the last alert was suppressed (e.g., `within_24h`) |
 
-**Examples:**
-
 ```bash
-# Show history for all routes
 uv run flight-alert-scraper history
-
-# Show the last 50 runs
 uv run flight-alert-scraper history --limit 50
-
-# Filter to one route by its key prefix
-uv run flight-alert-scraper history a1b2c3d4
-
-# Use a non-default database
-uv run flight-alert-scraper history --db /data/flights.db
+uv run flight-alert-scraper history a1b2c3d4   # filter by key prefix
 ```
 
 ---
 
 ### `test-email`
 
-Renders a synthetic email with fake flight data — useful for checking template layout and SMTP credentials without triggering a real scrape.
+Renders a synthetic email with fake flight data — useful for verifying template layout and SMTP credentials without triggering a real scrape.
 
 ```
 uv run flight-alert-scraper test-email [OPTIONS]
@@ -309,31 +381,20 @@ uv run flight-alert-scraper test-email [OPTIONS]
 | `--dry-run` / `--send` | `--dry-run` | Write to `artifacts/preview/` vs. actually send |
 | `--db PATH` | `./flight_alerts.db` | Path to the SQLite file |
 
-**Examples:**
-
 ```bash
-# Write preview files (safe default)
-uv run flight-alert-scraper test-email
-
-# Actually send to ALERT_RECIPIENT — verifies SMTP credentials work
-uv run flight-alert-scraper test-email --send
+uv run flight-alert-scraper test-email           # preview HTML locally
+uv run flight-alert-scraper test-email --send    # verify SMTP credentials
 ```
-
-After a dry run, open the generated `.html` file in `artifacts/preview/` to see exactly what recipients will receive.
 
 ---
 
 ### `rank`
 
-Reads a JSON fixture file containing flight options and a query, runs them through the ranking engine, and prints a formatted tier table. **No network calls, no database writes** — great for debugging tier logic offline.
+Reads a JSON fixture file, runs it through the ranking engine, and prints a formatted tier table. No network calls, no database writes — useful for debugging tier logic offline.
 
 ```
 uv run flight-alert-scraper rank --from-fixture FILE
 ```
-
-| Option | Description |
-|---|---|
-| `--from-fixture PATH` | *(required)* Path to a JSON fixture file |
 
 **Fixture format:**
 
@@ -355,18 +416,9 @@ uv run flight-alert-scraper rank --from-fixture FILE
       "hourly_time_penalty_usd": "20.00"
     }
   },
-  "options": [
-    {
-      "legs": [...],
-      "price_usd": "1150.00",
-      "total_duration_minutes": 1260,
-      ...
-    }
-  ]
+  "options": [...]
 }
 ```
-
-**Example:**
 
 ```bash
 uv run flight-alert-scraper rank --from-fixture tests/fixtures/iad_khi.json
@@ -374,19 +426,19 @@ uv run flight-alert-scraper rank --from-fixture tests/fixtures/iad_khi.json
 
 ---
 
-## 🏆 Tier System
+## Tier System
 
 Every itinerary is assigned to exactly one tier based on your constraints.
 
 ### Tier 1 — Direct Match ✅
 
-*The flight you actually want.* Meets **both** constraints simultaneously:
+*The flight you actually want.* Meets **all** constraints simultaneously:
 
 - Price ≤ `max_price_usd`
 - Total duration ≤ `max_duration_minutes` (if set)
 - Stops ≤ `max_stops` (if set)
 
-Tier 1 results are sorted by **(price ascending, duration ascending)**.
+Sorted by **(price ascending, duration ascending)**.
 
 ---
 
@@ -394,14 +446,12 @@ Tier 1 results are sorted by **(price ascending, duration ascending)**.
 
 *Worth a look — one constraint is slightly violated, but the tradeoff is explicit.*
 
-Two sub-labels qualify a flight for Tier 2:
+| Label | Condition |
+|---|---|
+| **Value Deal** | Price ≤ budget × (1 − `value_deal_discount`) AND duration exceeds limit by ≤ `value_deal_duration_buffer_minutes` |
+| **Time Saver** | Duration ≤ limit AND price ≤ budget × (1 + `time_saver_price_overage`) |
 
-| Label | Condition | Description |
-|---|---|---|
-| **Value Deal** | Price ≤ budget × (1 − `value_deal_discount`) AND duration exceeds limit by ≤ `value_deal_duration_buffer_minutes` | Significantly cheaper than budget, just a bit slower |
-| **Time Saver** | Duration ≤ limit AND price ≤ budget × (1 + `time_saver_price_overage`) | Within your time limit for a small price premium |
-
-Tier 2 results are sorted by **effective cost** (price + time penalty for excess duration).
+Sorted by **effective cost** (price + time penalty for excess duration).
 
 ---
 
@@ -411,11 +461,9 @@ Tier 2 results are sorted by **effective cost** (price + time penalty for excess
 
 | Label | How it's chosen |
 |---|---|
-| **Best Balance** | Minimizes effective cost (price + hourly time penalty × hours) |
+| **Best Balance** | Minimizes effective cost (price + hourly penalty × hours) |
 | **Cheapest** | Lowest price regardless of duration |
 | **Fastest** | Shortest duration regardless of price |
-
-Up to three distinct flights are shown (one may hold multiple labels if the same itinerary is both cheapest and fastest).
 
 ---
 
@@ -425,28 +473,26 @@ Up to three distinct flights are shown (one may hold multiple labels if the same
 effective_cost = price_usd + (total_duration_hours × hourly_time_penalty_usd)
 ```
 
-This blends money and time into a single comparable number. A `$20/hour` penalty means spending an extra hour in transit costs as much as $20 — adjust `hourly_time_penalty_usd` in `watchlist.yaml` to match how you personally value your time.
+Blends money and time into a single comparable number. A `$20/hour` penalty means an extra hour of travel costs as much as $20. Adjust `hourly_time_penalty_usd` in `watchlist.yaml` to match how you value your time.
 
 ---
 
-## 📬 Alert Logic
-
-The system tracks state per route and applies three alert rules:
+## Alert Logic
 
 | Condition | Alert type | Frequency |
 |---|---|---|
 | A **new Tier 1** itinerary appeared | **Immediate** | Sent right away |
 | Price dropped **≥ 5%** on a known Tier 1 | **Immediate** | Sent right away |
-| No Tier 1 exists, but Tier 2/3 results present | **Digest** | At most once per 24 hours |
+| No Tier 1 exists, Tier 2/3 results present | **Digest** | At most once per 24 hours |
 | Nothing changed since last run | **Silent** | No email sent |
 
-> **Anti-spam guarantee:** The digest is rate-limited to once every 24 hours per route. If nothing meaningful changes, no email is sent regardless of how often the scraper runs.
+> **Anti-spam guarantee:** The digest is rate-limited to once every 24 hours per route. Skydrop never sends two emails for the same unchanged state.
 
 ---
 
-## 🌐 Data Sources & Fallback Chain
+## Data Sources & Fallback Chain
 
-Providers are tried in order. If a provider fails or returns no usable data, the next one is tried automatically.
+Providers are tried in order. If one fails or returns no usable data, the next is tried automatically.
 
 ```
 1. google_http      httpx + selectolax (fast, no browser)
@@ -458,60 +504,59 @@ Providers are tried in order. If a provider fails or returns no usable data, the
 3. serpapi          SerpApi Google Flights endpoint (250 free searches/month)
 ```
 
-- **`google_http`** is the primary source — fastest and uses no API quota.
-- **`google_browser`** kicks in when Google blocks the HTTP request. It uses [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) (not playwright-stealth) to avoid fingerprint detection.
-- **`serpapi`** is opt-in. Set `SERPAPI_KEY` in `.env` to enable it. Free tier gives 250 searches/month.
+- **`google_http`** — fastest, uses no API quota.
+- **`google_browser`** — kicks in when Google blocks the HTTP request. Uses [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) (not playwright-stealth) to avoid fingerprint detection.
+- **`serpapi`** — opt-in. Set `SERPAPI_KEY` in `.env` to enable. Free tier gives 250 searches/month.
 
 ---
 
-## ⏰ Automating with Windows Task Scheduler
+## Automating with Windows Task Scheduler
 
 Run checks automatically in the background every 6 hours — no terminal popups, no manual triggering.
 
-### Step 1 — Register the base task
+### Step 1 — Register the task
 
 Open **PowerShell** and run (adjust the path to your project root):
 
 ```powershell
-schtasks /create /tn "FlightAlertScraper" `
+schtasks /create /tn "skydrop" `
   /tr "cmd /c cd /d C:\Users\arsha\OneDrive\Documents\flight_scraper\flight-alert-scraper && uv run flight-alert-scraper check" `
   /sc hourly /mo 6 /st 06:00 /f
 ```
 
-> **Note:** The `/d` flag in `cd /d` is required when the project is on a different drive than `cmd`'s current directory. Without it, a drive change silently fails and the task errors every run.
+> The `/d` flag in `cd /d` is required when the project lives on a different drive than `cmd`'s current directory.
 
 ---
 
-### Step 2 — Configure power, wake & background settings *(recommended)*
+### Step 2 — Configure power, wake & background settings
 
-By default, Windows suppresses scheduled tasks when the machine is on battery or the screen is locked. Run the following in **PowerShell as Administrator** to remove those restrictions:
+Run the following in **PowerShell as Administrator**:
 
 ```powershell
-# Allow running on battery; catch up if the machine was asleep at the scheduled time
-$task = Get-ScheduledTask -TaskName "FlightAlertScraper"
+$task = Get-ScheduledTask -TaskName "skydrop"
 $task.Settings.DisallowStartIfOnBatteries = $false
 $task.Settings.StopIfGoingOnBatteries     = $false
 $task.Settings.StartWhenAvailable         = $true
 Set-ScheduledTask -InputObject $task
 
-# Run in the background whether logged in, locked, or signed out — no plaintext passwords
+# Run in the background whether logged in, locked, or signed out
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U
-Set-ScheduledTask -TaskName "FlightAlertScraper" -Principal $principal
+Set-ScheduledTask -TaskName "skydrop" -Principal $principal
 ```
 
 | Setting | What it does |
 |---|---|
-| `DisallowStartIfOnBatteries = $false` | Runs checks even when unplugged from AC power |
-| `StopIfGoingOnBatteries = $false` | Won't abort a run mid-way if the charger is unplugged |
-| `StartWhenAvailable = $true` | If the machine was asleep at the 6-hour mark, runs immediately on wake instead of skipping the window |
-| `LogonType = S4U` | Service-for-User background logon — checks continue when the screen is locked, without storing a plaintext password |
+| `DisallowStartIfOnBatteries = $false` | Runs checks even when unplugged |
+| `StopIfGoingOnBatteries = $false` | Won't abort a run if the charger is unplugged |
+| `StartWhenAvailable = $true` | Catches up on a missed window immediately on wake |
+| `LogonType = S4U` | Checks continue when the screen is locked, no stored password |
 
 ---
 
-### Step 3 — Verify the configuration
+### Step 3 — Verify
 
 ```powershell
-$t = Get-ScheduledTask -TaskName "FlightAlertScraper"
+$t = Get-ScheduledTask -TaskName "skydrop"
 [PSCustomObject]@{
     TaskName       = $t.TaskName
     State          = $t.State
@@ -522,10 +567,10 @@ $t = Get-ScheduledTask -TaskName "FlightAlertScraper"
 }
 ```
 
-**Expected output:**
+Expected output:
 
 ```
-TaskName       : FlightAlertScraper
+TaskName       : skydrop
 State          : Ready
 StartOnBattery : True
 StopOnBattery  : False
@@ -535,12 +580,10 @@ LogonType      : S4U
 
 ---
 
-### Step 4 — Test the task manually
-
-Trigger the task and confirm it writes to the database:
+### Step 4 — Test manually
 
 ```powershell
-schtasks /run /tn "FlightAlertScraper"
+schtasks /run /tn "skydrop"
 ```
 
 Wait 15–30 seconds, then inspect the run log:
@@ -554,14 +597,9 @@ uv run flight-alert-scraper history
 ### Other useful scheduler commands
 
 ```powershell
-# Check status and last run result
-schtasks /query /tn "FlightAlertScraper" /fo LIST /v
-
-# Delete the task
-schtasks /delete /tn "FlightAlertScraper" /f
-
-# Change interval (e.g., every 4 hours)
-schtasks /change /tn "FlightAlertScraper" /mo 4
+schtasks /query /tn "skydrop" /fo LIST /v   # status and last run result
+schtasks /delete /tn "skydrop" /f           # remove the task
+schtasks /change /tn "skydrop" /mo 4        # change to every 4 hours
 ```
 
 ### Recommended schedule
@@ -570,34 +608,25 @@ schtasks /change /tn "FlightAlertScraper" /mo 4
 |---|---|
 | Every 3–4 hours | More timely; slightly higher chance of rate-limiting |
 | **Every 6 hours** *(recommended)* | Good balance of freshness vs. reliability |
-| Once daily | Lowest footprint; fine for routes more than a week away |
+| Once daily | Lowest footprint; fine for routes more than a week out |
 
 ---
 
-## 🧪 Running Tests
+## Running Tests
 
 ```bash
-# Run the full test suite
-uv run pytest
-
-# Run with coverage report
-uv run pytest --cov=flight_alert_scraper
-
-# Run a specific test file
-uv run pytest tests/test_ranking.py -v
-
-# Run linting
-uv run ruff check .
-
-# Run type checking
-uv run mypy src
+uv run pytest                                    # full suite
+uv run pytest --cov=flight_alert_scraper         # with coverage
+uv run pytest tests/test_ranking.py -v           # specific file
+uv run ruff check .                              # linting
+uv run mypy src                                  # type checking
 ```
 
-All 52 tests are offline (no network calls, no email sending). Fixtures are used for parser and ranking tests.
+All 52 tests are offline — no network calls, no email sending. Fixtures are used for parser and ranking tests.
 
 ---
 
-## 🗂️ Project Layout
+## Project Layout
 
 ```
 flight-alert-scraper/
@@ -634,13 +663,16 @@ flight-alert-scraper/
 │   │
 │   ├── db/                   ← SQLite persistence (SQLModel)
 │   │   ├── tables.py         ← WatchedQuery, ScrapeRun, AlertState ORM models
-│   │   ├── repo.py           ← query helpers (get_recent_runs, get_alert_state …)
+│   │   ├── repo.py           ← query helpers
 │   │   └── engine.py         ← get_session, migrate
+│   │
+│   ├── web/                  ← local FastAPI dashboard
+│   │   └── app.py
 │   │
 │   └── notifications/        ← email rendering and delivery
 │       ├── render.py         ← Jinja2 → HTML + text
 │       ├── smtp.py           ← SmtpNotifier (Gmail TLS)
-│       ├── decide.py         ← AlertDecision logic (immediate / digest / silent)
+│       ├── decide.py         ← AlertDecision logic
 │       └── templates/
 │           ├── immediate.html.j2
 │           ├── immediate.txt.j2
@@ -662,12 +694,12 @@ flight-alert-scraper/
 
 ---
 
-## 🩺 Troubleshooting
+## Troubleshooting
 
 ### No email received after `check`
 
-1. **Run `history`** to see whether the scrape ran and what it found.
-2. **Check `Suppressed` column** — if it says `within_24h`, a digest was already sent recently.
+1. **Run `history`** — verify the scrape ran and what it found.
+2. **Check the `Suppressed` column** — `within_24h` means a digest was already sent recently.
 3. **Try `--dry-run`** and inspect `artifacts/preview/` — if the HTML file exists, the scraper worked but SMTP is the issue.
 4. **Run `test-email --send`** to isolate SMTP from scraping entirely.
 
@@ -681,24 +713,24 @@ flight-alert-scraper/
 
 ### Browser scraper launches but finds no flights
 
-- Google Flights sometimes requires a CAPTCHA. The browser scraper retries with a fresh session automatically, but persistent blocks may require rotating the cookie cache (delete `.cache/cookies.json`).
+Google Flights sometimes requires a CAPTCHA. The browser scraper retries with a fresh session automatically, but persistent blocks may require rotating the cookie cache — delete `.cache/cookies.json` and retry.
 
 ### SerpApi returns stale results
 
-- The free tier caches results for up to 1 hour. This is expected behaviour — consider the paid tier for fresher data.
+The free tier caches results for up to 1 hour. This is expected — consider the paid tier for fresher data.
 
 ### `uv: command not found`
 
-Install uv: `pip install uv` or follow the [official guide](https://github.com/astral-sh/uv#installation).
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows
+winget install astral-sh.uv
+```
 
 ---
 
-## Author
-
-Areeb Arshad | Data Science, Statistics, and Mathematics @ Virginia Tech 
-
----
-
-## 📄 License
+## License
 
 MIT — see [LICENSE](LICENSE).
