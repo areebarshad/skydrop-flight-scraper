@@ -216,6 +216,7 @@ tempCodeRunnerFile.py
 *.db-journal
 artifacts/
 .cache/
+watchlist.yaml
 
 # Marimo
 marimo/_static/
