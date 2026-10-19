@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}{{ wq.origin }}&rarr;{{ wq.destination }} &mdash; skydrop{% endblock %}
+{% block content %}
+<div class="dashboard">
+
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1 class="route-title">{{ wq.origin }}&rarr;{{ wq.destination }}</h1>
+      <span class="last-checked">
+        {% if latest_run %}
+          last checked {{ last_checked_str }} via {{ latest_run.provider or "unknown" }}
+        {% else %}
+          never checked
+        {% endif %}
+      </span>
+    </div>
+    <div class="page-header-right">
+      <button
+        class="btn btn-primary"
+        hx-post="/routes/{{ query_key }}/check"
+        hx-target="#job-status"
+        hx-swap="outerHTML"
+        hx-indicator="#job-spinner">
+        &#x27F3; Run check now
+      </button>
+      <span id="job-spinner" class="htmx-indicator">&hellip;</span>
+    </div>
+  </div>
+  <div id="job-status"></div>
+
+  {% if hero %}
+  <section class="section">
+    <h2 class="section-title">Best option</h2>
+    <div class="hero-card tier-{{ hero.tier }}">
+      <div class="hero-price">{{ hero.price }}</div>
+      <div class="hero-meta">
+        {{ hero.duration }}
+        &middot; {{ hero.stops }} stop{% if hero.stops != 1 %}s{% endif %}
+        &middot; {{ hero.carriers }}
+      </div>
+      <div class="hero-constraint">{{ constraint_line }}</div>
+      <div class="hero-badges">
+        {% for lbl in hero.labels %}
+        <span class="badge tier-badge-{{ hero.tier }}">{{ lbl.replace("_", " ") }}</span>
+        {% endfor %}
+      </div>
+      <a class="btn btn-book" href="{{ hero.booking_link }}" target="_blank" rel="noopener">Book &#x25B8;</a>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="section">
+    <h2 class="section-title">Price history</h2>
+    {% if price_svg %}
+    <div class="chart-wrap">{{ price_svg | safe }}</div>
+    <div class="chart-legend">
+      <span class="legend-item"><span class="legend-dot tier1-dot"></span>Tier 1</span>
+      <span class="legend-item"><span class="legend-line overall-line"></span>Overall</span>
+      <span class="legend-item"><span class="legend-dash budget-dash"></span>Budget</span>
+    </div>
+    {% else %}
+    <p class="empty-state">
+      {% if price_history_count < 2 %}
+        Collecting &mdash; needs 2+ runs with data.
+      {% else %}
+        No snapshot data yet.
+      {% endif %}
+    </p>
+    {% endif %}
+  </section>
+
+  <section class="section">
+    <h2 class="section-title">Latest results</h2>
+    {% if not tier1_cards and not tier2_cards and not tier3_cards %}
+    <p class="empty-state">No flight data yet. Run a check to populate.</p>
+    {% else %}
+    <div class="tiers">
+
+      <div class="tier-col">
+        <h3 class="tier-heading tier1-heading">Tier 1 &mdash; Direct matches <span class="tier-count">{{ tier1_cards | length }}</span></h3>
+        {% for card in tier1_cards %}
+        <div class="flight-card tier-card-1">
+          <div class="card-price">{{ card.price }}</div>
+          <div class="card-meta">{{ card.duration }} &middot; {{ card.stops }} stop{% if card.stops != 1 %}s{% endif %} &middot; {{ card.carriers }}</div>
+          <div class="card-labels">{% for l in card.labels %}<span class="badge badge-sm">{{ l.replace("_", " ") }}</span>{% endfor %}</div>
+          <a class="btn btn-sm btn-book" href="{{ card.booking_link }}" target="_blank" rel="noopener">Book &#x25B8;</a>
+        </div>
+        {% endfor %}
+        {% if not tier1_cards %}<p class="empty-col">No direct matches</p>{% endif %}
+      </div>
+
+      <div class="tier-col">
+        <h3 class="tier-heading tier2-heading">Tier 2 &mdash; Near misses <span class="tier-count">{{ tier2_cards | length }}</span></h3>
+        {% for card in tier2_cards %}
+        <div class="flight-card tier-card-2">
+          <div class="card-price">{{ card.price }}</div>
+          <div class="card-meta">{{ card.duration }} &middot; {{ card.stops }} stop{% if card.stops != 1 %}s{% endif %} &middot; {{ card.carriers }}</div>
+          <div class="card-labels">{% for l in card.labels %}<span class="badge badge-sm">{{ l.replace("_", " ") }}</span>{% endfor %}</div>
+          <a class="btn btn-sm btn-book" href="{{ card.booking_link }}" target="_blank" rel="noopener">Book &#x25B8;</a>
+        </div>
+        {% endfor %}
+        {% if not tier2_cards %}<p class="empty-col">No near misses</p>{% endif %}
+      </div>
+
+      <div class="tier-col">
+        <h3 class="tier-heading tier3-heading">Tier 3 &mdash; Baseline <span class="tier-count">{{ tier3_cards | length }}</span></h3>
+        {% for card in tier3_cards %}
+        <div class="flight-card tier-card-3">
+          <div class="card-price">{{ card.price }}</div>
+          <div class="card-meta">{{ card.duration }} &middot; {{ card.stops }} stop{% if card.stops != 1 %}s{% endif %} &middot; {{ card.carriers }}</div>
+          <div class="card-labels">{% for l in card.labels %}<span class="badge badge-sm">{{ l.replace("_", " ") }}</span>{% endfor %}</div>
+          <a class="btn btn-sm btn-book" href="{{ card.booking_link }}" target="_blank" rel="noopener">Book &#x25B8;</a>
+        </div>
+        {% endfor %}
+        {% if not tier3_cards %}<p class="empty-col">No baseline options</p>{% endif %}
+      </div>
+
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="section">
+    <h2 class="section-title">Run history</h2>
+    {% if recent_runs %}
+    <div class="table-wrap">
+    <table class="run-table">
+      <thead>
+        <tr>
+          <th>Started</th>
+          <th>Provider</th>
+          <th>Status</th>
+          <th>T1</th>
+          <th>T2</th>
+          <th>Candidates</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for run in recent_runs %}
+      <tr class="run-row-{{ run.status }}">
+        <td>{{ run.started_at.strftime("%Y-%m-%d %H:%M") }}</td>
+        <td>{{ run.provider or "&mdash;" }}</td>
+        <td><span class="status-{{ run.status }}">{{ run.status }}</span></td>
+        <td>{{ run.tier1_count }}</td>
+        <td>{{ run.tier2_count }}</td>
+        <td>{{ run.candidates_found }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="empty-state">No runs recorded yet.</p>
+    {% endif %}
+  </section>
+
+  {% if latest_run %}
+  <div class="footer-strip">
+    <span>candidates: {{ latest_run.candidates_found }}</span>
+    <span>filtered: {{ latest_run.candidates_found - latest_run.tier1_count - latest_run.tier2_count }}</span>
+    <span>provider: {{ latest_run.provider or "&mdash;" }}</span>
+    {% if alert_state and alert_state.last_suppressed_reason %}
+    <span class="suppressed">no email sent: {{ alert_state.last_suppressed_reason }}</span>
+    {% endif %}
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

@@ -1,8 +1,9 @@
 """Command-line interface."""
 from __future__ import annotations
 
+from datetime import UTC
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -14,15 +15,21 @@ console = Console()
 
 @app.command()
 def check(
-    dry_run: bool = typer.Option(False, "--dry-run", help="Render emails to artifacts/preview/ instead of sending."),
-    watchlist: Optional[Path] = typer.Option(None, "--watchlist", help="Path to watchlist.yaml"),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Render emails to artifacts/preview/ instead of sending.",
+    ),
+    watchlist: Path | None = typer.Option(
+        None, "--watchlist", help="Path to watchlist.yaml"
+    ),
 ) -> None:
     """Run a check of all watched routes and send alerts if anything changed."""
     from flight_alert_scraper import log as _log
     _log.configure()
 
     from flight_alert_scraper.config import Settings
-    env_overrides: dict[str, object] = {}
+    env_overrides: dict[str, Any] = {}
     if watchlist:
         env_overrides["watchlist_path"] = watchlist
     if dry_run:
@@ -33,12 +40,13 @@ def check(
     migrate(settings.db_path)
 
     from flight_alert_scraper.notifications.smtp import SmtpNotifier
+    from flight_alert_scraper.scrapers.base import FlightProvider
     from flight_alert_scraper.scrapers.chain import ProviderChain
     from flight_alert_scraper.scrapers.google_browser import GoogleBrowserProvider
     from flight_alert_scraper.scrapers.google_http import GoogleHttpProvider
     from flight_alert_scraper.scrapers.serpapi import SerpApiProvider
 
-    providers = [GoogleHttpProvider(), GoogleBrowserProvider()]
+    providers: list[FlightProvider] = [GoogleHttpProvider(), GoogleBrowserProvider()]
     if settings.serpapi_key:
         providers.append(SerpApiProvider(settings.serpapi_key))
     chain = ProviderChain(providers)
@@ -52,13 +60,18 @@ def check(
     queries = settings.load_queries()
     with get_session(settings.db_path) as session:
         for query in queries:
-            console.print(f"[bold]Checking[/bold] {query.origin}→{query.destination} {query.depart_date}")
+            console.print(
+                f"[bold]Checking[/bold] {query.origin}→{query.destination}"
+                f" {query.depart_date}"
+            )
             run_query(query, chain, session, notifier, dry_run=dry_run)
 
 
 @app.command("init-db")
 def init_db(
-    db: Path = typer.Option(Path("./flight_alerts.db"), "--db", help="Path to SQLite DB"),
+    db: Path = typer.Option(
+        Path("./flight_alerts.db"), "--db", help="Path to SQLite DB"
+    ),
 ) -> None:
     """Create or migrate the database schema."""
     from flight_alert_scraper.db.engine import migrate
@@ -68,15 +81,16 @@ def init_db(
 
 @app.command("history")
 def history(
-    query_key: Optional[str] = typer.Argument(None, help="Filter by query key"),
+    query_key: str | None = typer.Argument(None, help="Filter by query key"),
     db: Path = typer.Option(Path("./flight_alerts.db"), "--db"),
     limit: int = typer.Option(20, "--limit"),
 ) -> None:
     """Show recent scrape run history."""
+    from sqlmodel import select
+
     from flight_alert_scraper.db.engine import get_session, migrate
     from flight_alert_scraper.db.repo import get_recent_runs
     from flight_alert_scraper.db.tables import WatchedQuery
-    from sqlmodel import select
 
     migrate(db)
     with get_session(db) as session:
@@ -119,16 +133,29 @@ def test_email(
     db: Path = typer.Option(Path("./flight_alerts.db"), "--db"),
 ) -> None:
     """Render a test email with synthetic data."""
-    from datetime import date, datetime, timezone
+    from datetime import date, datetime
     from decimal import Decimal
 
+    from flight_alert_scraper.models.alert import (
+        AlertDecision,
+        AlertKind,
+        TriggerReason,
+    )
     from flight_alert_scraper.models.flight import BookingLinks, FlightOption, Leg
     from flight_alert_scraper.models.query import CabinClass, Constraints, SearchQuery
-    from flight_alert_scraper.models.result import MatchLabel, RankedResults, Tier, TieredMatch
-    from flight_alert_scraper.models.alert import AlertDecision, AlertKind, TriggerReason
-    from flight_alert_scraper.notifications.render import render_html, render_subject, render_text
+    from flight_alert_scraper.models.result import (
+        MatchLabel,
+        RankedResults,
+        Tier,
+        TieredMatch,
+    )
+    from flight_alert_scraper.notifications.render import (
+        render_html,
+        render_subject,
+        render_text,
+    )
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     leg = Leg(
         carrier="Pakistan International Airlines",
         carrier_code="PK",
@@ -136,7 +163,7 @@ def test_email(
         origin="IAD",
         destination="KHI",
         depart_at=now,
-        arrive_at=datetime.fromtimestamp(now.timestamp() + 21 * 3600, tz=timezone.utc),
+        arrive_at=datetime.fromtimestamp(now.timestamp() + 21 * 3600, tz=UTC),
         duration_minutes=1260,
     )
     links = BookingLinks(
@@ -197,7 +224,9 @@ def test_email(
         (preview_dir / f"{ts}_subject.txt").write_text(subject)
         (preview_dir / f"{ts}_email.html").write_text(html_body)
         (preview_dir / f"{ts}_email.txt").write_text(text_body)
-        console.print(f"[green]Preview written to[/green] artifacts/preview/{ts}_email.html")
+        console.print(
+            f"[green]Preview written to[/green] artifacts/preview/{ts}_email.html"
+        )
         console.print(f"Subject: {subject}")
     else:
         from flight_alert_scraper.config import get_settings
@@ -210,15 +239,17 @@ def test_email(
 
 @app.command("rank")
 def rank_cmd(
-    from_fixture: Optional[Path] = typer.Option(None, "--from-fixture", help="JSON fixture file"),
+    from_fixture: Path | None = typer.Option(
+        None, "--from-fixture", help="JSON fixture file"
+    ),
 ) -> None:
     """Rank flights from a fixture file and print the three tiers."""
     import json
+    from datetime import date
+
     from flight_alert_scraper.engine.ranking import rank
     from flight_alert_scraper.models.flight import FlightOption
     from flight_alert_scraper.models.query import CabinClass, Constraints, SearchQuery
-    from datetime import date
-    from decimal import Decimal
 
     if from_fixture is None:
         console.print("[red]Provide --from-fixture path[/red]")
@@ -235,7 +266,7 @@ def rank_cmd(
     query = SearchQuery(**q_data, constraints=constraints)
     ranked = rank(options, query)
 
-    def _show_tier(title: str, matches):
+    def _show_tier(title: str, matches: list[Any]) -> None:
         if not matches:
             return
         t = Table(title=title)
@@ -261,3 +292,51 @@ def rank_cmd(
     console.print(
         f"[dim]total={ranked.total_candidates} filtered_out={ranked.filtered_out}[/dim]"
     )
+
+
+@app.command("ui")
+def ui(
+    port: int = typer.Option(8765, "--port", help="Port to listen on."),
+    db: Path | None = typer.Option(None, "--db"),
+    watchlist: Path | None = typer.Option(None, "--watchlist"),
+    no_browser: bool = typer.Option(False, "--no-browser"),
+) -> None:
+    """Start the local web dashboard on 127.0.0.1."""
+    from flight_alert_scraper import log as _log
+
+    _log.configure()
+
+    from flight_alert_scraper.config import Settings
+
+    env_overrides: dict[str, Any] = {}
+    if db:
+        env_overrides["db_path"] = db
+    if watchlist:
+        env_overrides["watchlist_path"] = watchlist
+    settings = Settings(**env_overrides)
+
+    from flight_alert_scraper.db.engine import migrate
+
+    migrate(settings.db_path)
+
+    import threading
+    import webbrowser
+
+    import uvicorn
+
+    from flight_alert_scraper.web.app import create_app
+
+    web_app = create_app(settings)
+
+    if not no_browser:
+
+        def _open() -> None:
+            import time
+
+            time.sleep(0.8)
+            webbrowser.open(f"http://127.0.0.1:{port}")
+
+        threading.Thread(target=_open, daemon=True).start()
+
+    console.print(f"[green]Dashboard:[/green] http://127.0.0.1:{port}")
+    uvicorn.run(web_app, host="127.0.0.1", port=port, log_level="warning")

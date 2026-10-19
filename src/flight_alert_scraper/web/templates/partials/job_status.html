@@ -1,0 +1,12 @@
+<div id="job-status"
+     hx-get="/jobs/{{ job_id }}"
+     hx-trigger="load, every 2s"
+     hx-target="this"
+     hx-swap="outerHTML">
+  <span class="job-msg job-{{ job.state }}">
+    {% if job.state == "pending" %}&hourglass; Queued
+    {% elif job.state == "running" %}&hourglass; {{ job.message }}
+    {% else %}{{ job.message }}
+    {% endif %}
+  </span>
+</div>

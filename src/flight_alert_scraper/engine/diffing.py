@@ -27,12 +27,10 @@ def is_negligible_change(
     if old_fingerprint is None:
         return False
 
-    new_items = {
-        m.option.signature: m.option.price_usd for m in ranked.tier1 + ranked.tier2
-    }
     # we need to decode the old fingerprint — but we only have the hash.
     # Negligible-change detection requires price history from the DB, which
     # the caller must provide. This function is called with explicit old/new prices.
+    _ = ranked
     return False
 
 
@@ -41,7 +39,7 @@ def is_negligible_change_prices(
     old_prices: dict[str, Decimal],
     threshold_pct: Decimal = Decimal("0.03"),
 ) -> bool:
-    """Return True if all matched prices moved < threshold and tier membership unchanged."""
+    """Return True if prices moved < threshold and tier membership unchanged."""
     if set(new_prices.keys()) != set(old_prices.keys()):
         return False
     for sig, new_price in new_prices.items():

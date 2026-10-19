@@ -1,4 +1,4 @@
-"""Fixture provider — replays saved flight options for testing. Never in the production chain."""
+"""Fixture provider — replays saved flight options for testing."""
 from __future__ import annotations
 
 from flight_alert_scraper.models.flight import FlightOption

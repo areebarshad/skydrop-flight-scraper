@@ -6,16 +6,15 @@ card), raises ParseError only when zero cards parse successfully.
 """
 from __future__ import annotations
 
-import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
-from flight_alert_scraper.models.flight import BookingLinks, FlightOption, Layover, Leg
+from flight_alert_scraper.models.flight import FlightOption, Layover, Leg
 from flight_alert_scraper.models.query import SearchQuery
 from flight_alert_scraper.parsers.duration import parse_minutes
 from flight_alert_scraper.scrapers.base import BlockedError, ParseError
@@ -54,7 +53,9 @@ def _parse_card(card: Any, query: SearchQuery, scraped_at: datetime) -> FlightOp
     price_text = price_node.text(strip=True)
     price = _parse_price(price_text)
 
-    duration_node = card.css_first(".gvkrdb") or card.css_first("[aria-label*='Total duration']")
+    duration_node = (
+        card.css_first(".gvkrdb") or card.css_first("[aria-label*='Total duration']")
+    )
     if duration_node is None:
         raise ValueError("No duration node found")
     total_minutes = parse_minutes(duration_node.text(strip=True))
@@ -75,11 +76,11 @@ def _parse_card(card: Any, query: SearchQuery, scraped_at: datetime) -> FlightOp
         stops = int(m.group(1)) if m else 0
 
     now = scraped_at
-    dep_node = card.css_first(".wtdjmc") or card.css_first("[aria-label*='Departure']")
-    arr_node = card.css_first(".XWcVob") or card.css_first("[aria-label*='Arrival']")
+    _ = card.css_first(".wtdjmc") or card.css_first("[aria-label*='Departure']")
+    _ = card.css_first(".XWcVob") or card.css_first("[aria-label*='Arrival']")
     depart_at = now
     arrive_at = datetime.fromtimestamp(
-        now.timestamp() + total_minutes * 60, tz=timezone.utc
+        now.timestamp() + total_minutes * 60, tz=UTC
     )
 
     legs = []
@@ -104,10 +105,10 @@ def _parse_card(card: Any, query: SearchQuery, scraped_at: datetime) -> FlightOp
         leg_duration = total_minutes // (stops + 1)
         for i in range(stops + 1):
             leg_dep = datetime.fromtimestamp(
-                now.timestamp() + i * leg_duration * 60, tz=timezone.utc
+                now.timestamp() + i * leg_duration * 60, tz=UTC
             )
             leg_arr = datetime.fromtimestamp(
-                now.timestamp() + (i + 1) * leg_duration * 60, tz=timezone.utc
+                now.timestamp() + (i + 1) * leg_duration * 60, tz=UTC
             )
             orig = query.origin if i == 0 else f"C{i:02d}"
             dest = query.destination if i == stops else f"C{i+1:02d}"
@@ -117,8 +118,12 @@ def _parse_card(card: Any, query: SearchQuery, scraped_at: datetime) -> FlightOp
                     carrier=carrier,
                     carrier_code=carrier_code,
                     flight_number=fn,
-                    origin=orig[:3].upper() if len(orig) >= 3 else orig.ljust(3, "X")[:3],
-                    destination=dest[:3].upper() if len(dest) >= 3 else dest.ljust(3, "X")[:3],
+                    origin=(
+                        orig[:3].upper() if len(orig) >= 3 else orig.ljust(3, "X")[:3]
+                    ),
+                    destination=(
+                        dest[:3].upper() if len(dest) >= 3 else dest.ljust(3, "X")[:3]
+                    ),
                     depart_at=leg_dep,
                     arrive_at=leg_arr,
                     duration_minutes=leg_duration,
@@ -144,7 +149,9 @@ def _parse_card(card: Any, query: SearchQuery, scraped_at: datetime) -> FlightOp
     )
 
 
-def parse_html(html: str, query: SearchQuery, scraped_at: datetime) -> list[FlightOption]:
+def parse_html(
+    html: str, query: SearchQuery, scraped_at: datetime
+) -> list[FlightOption]:
     """Parse a Google Flights HTML response. Raises BlockedError on consent wall."""
     if _is_consent_wall(html):
         raise BlockedError("Google consent wall detected")

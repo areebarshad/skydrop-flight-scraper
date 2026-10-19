@@ -52,7 +52,9 @@ class ProviderChain:
             log.info("Trying provider: %s", provider.name)
             try:
                 results = provider.search(query)
-                metrics.attempts.append(ProviderResult(provider=provider.name, results=results))
+                metrics.attempts.append(
+                    ProviderResult(provider=provider.name, results=results)
+                )
                 log.info("Provider %s returned %d results", provider.name, len(results))
                 return results, metrics
             except ConfigError as exc:

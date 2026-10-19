@@ -5,7 +5,12 @@ from decimal import Decimal
 from flight_alert_scraper.engine.scoring import effective_cost, pareto_front
 from flight_alert_scraper.models.flight import FlightOption
 from flight_alert_scraper.models.query import SearchQuery
-from flight_alert_scraper.models.result import MatchLabel, RankedResults, Tier, TieredMatch
+from flight_alert_scraper.models.result import (
+    MatchLabel,
+    RankedResults,
+    Tier,
+    TieredMatch,
+)
 
 
 def _fmt_hours(minutes: int) -> str:
@@ -33,7 +38,8 @@ def _to_match(
     for label in labels:
         if label == MatchLabel.DIRECT:
             notes.append(
-                f"${option.price_usd:.0f}, {_fmt_hours(option.total_duration_minutes)} — meets all constraints"
+                f"${option.price_usd:.0f}, "
+                f"{_fmt_hours(option.total_duration_minutes)} — meets all constraints"
             )
         elif label == MatchLabel.CHEAPEST:
             over = option.price_usd - c.max_price_usd
@@ -120,7 +126,10 @@ def rank(options: list[FlightOption], query: SearchQuery) -> RankedResults:
             if o.signature in t1_sigs:
                 continue
             overage = o.total_duration_minutes - limit
-            if o.price_usd <= value_ceiling and 0 < overage <= c.value_deal_duration_buffer_minutes:
+            if (
+                o.price_usd <= value_ceiling
+                and 0 < overage <= c.value_deal_duration_buffer_minutes
+            ):
                 near.setdefault(o.signature, []).append(MatchLabel.VALUE_DEAL)
 
     price_ceiling = budget * (Decimal(1) + c.time_saver_price_overage)
@@ -166,7 +175,10 @@ def rank(options: list[FlightOption], query: SearchQuery) -> RankedResults:
 
     return RankedResults(
         query=query,
-        tier1=[_to_match(o, Tier.DIRECT_MATCH, [MatchLabel.DIRECT], query) for o in tier1_raw],
+        tier1=[
+            _to_match(o, Tier.DIRECT_MATCH, [MatchLabel.DIRECT], query)
+            for o in tier1_raw
+        ],
         tier2=tier2,
         tier3=tier3,
         total_candidates=total,

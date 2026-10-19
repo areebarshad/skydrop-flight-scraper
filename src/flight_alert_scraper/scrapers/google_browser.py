@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from flight_alert_scraper.models.flight import FlightOption
@@ -54,7 +54,7 @@ class GoogleBrowserProvider:
         url = build_url(query)
         log.info("google_browser fetching %s", url)
         html, screenshot = asyncio.run(_fetch_async(url))
-        scraped_at = datetime.now(tz=timezone.utc)
+        scraped_at = datetime.now(tz=UTC)
 
         ts = scraped_at.strftime("%Y%m%dT%H%M%SZ")
         artifact_dir = _ARTIFACTS / ts

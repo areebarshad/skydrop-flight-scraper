@@ -1,7 +1,7 @@
-"""Alert trigger logic. Pure function — no I/O, fully unit-testable with time-machine."""
+"""Alert trigger logic. Pure function — no I/O, fully unit-testable."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from flight_alert_scraper.db.tables import AlertState
@@ -12,7 +12,12 @@ from flight_alert_scraper.engine.diffing import (
     is_price_drop,
     results_fingerprint,
 )
-from flight_alert_scraper.models.alert import AlertDecision, AlertKind, SuppressReason, TriggerReason
+from flight_alert_scraper.models.alert import (
+    AlertDecision,
+    AlertKind,
+    SuppressReason,
+    TriggerReason,
+)
 from flight_alert_scraper.models.result import RankedResults
 
 _DIGEST_INTERVAL = timedelta(hours=24)

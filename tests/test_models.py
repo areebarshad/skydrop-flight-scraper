@@ -1,14 +1,14 @@
 """Tests for model validators."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 
-from tests.conftest import make_direct_flight, make_links, make_query
-from flight_alert_scraper.models.flight import BookingLinks, FlightOption, Layover, Leg
+from flight_alert_scraper.models.flight import FlightOption, Layover, Leg
 from flight_alert_scraper.models.query import CabinClass, Constraints, SearchQuery
+from tests.conftest import make_direct_flight, make_links
 
 
 def test_query_key_excludes_constraints():
@@ -39,9 +39,9 @@ def test_signature_changes_with_flight_number():
 
 
 def test_inconsistent_leg_chain_raises():
-    now = datetime(2026, 11, 1, 10, 0, tzinfo=timezone.utc)
-    arrive1 = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
-    arrive2 = datetime(2026, 11, 1, 15, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 11, 1, 10, 0, tzinfo=UTC)
+    arrive1 = datetime(2026, 11, 1, 12, 0, tzinfo=UTC)
+    arrive2 = datetime(2026, 11, 1, 15, 0, tzinfo=UTC)
     leg1 = Leg(
         carrier="A", carrier_code="AA", flight_number="1",
         origin="IAD", destination="DXB",
@@ -67,9 +67,8 @@ def test_inconsistent_leg_chain_raises():
 
 
 def test_wrong_layover_count_raises():
-    f = make_direct_flight("1000", 1260)
-    now = datetime(2026, 11, 1, 10, 0, tzinfo=timezone.utc)
-    arrive = datetime.fromtimestamp(now.timestamp() + 1260 * 60, tz=timezone.utc)
+    now = datetime(2026, 11, 1, 10, 0, tzinfo=UTC)
+    arrive = datetime.fromtimestamp(now.timestamp() + 1260 * 60, tz=UTC)
     leg = Leg(
         carrier="Test", carrier_code="PK", flight_number="785",
         origin="IAD", destination="KHI",
@@ -89,8 +88,8 @@ def test_wrong_layover_count_raises():
 
 
 def test_duration_mismatch_raises():
-    now = datetime(2026, 11, 1, 10, 0, tzinfo=timezone.utc)
-    arrive = datetime.fromtimestamp(now.timestamp() + 1260 * 60, tz=timezone.utc)
+    now = datetime(2026, 11, 1, 10, 0, tzinfo=UTC)
+    arrive = datetime.fromtimestamp(now.timestamp() + 1260 * 60, tz=UTC)
     leg = Leg(
         carrier="Test", carrier_code="PK", flight_number="785",
         origin="IAD", destination="KHI",

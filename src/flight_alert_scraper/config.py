@@ -11,7 +11,9 @@ from flight_alert_scraper.models.query import CabinClass, Constraints, SearchQue
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
     db_path: Path = Field(default=Path("./flight_alerts.db"))
     smtp_user: str = ""

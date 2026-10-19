@@ -19,6 +19,9 @@ dependencies = [
     "pyyaml>=6.0",
     "tenacity>=8.3",
     "patchright>=1.48",
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+    "python-multipart>=0.0.12",
 ]
 
 [project.scripts]

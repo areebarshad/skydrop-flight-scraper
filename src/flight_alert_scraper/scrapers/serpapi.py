@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
 import httpx
 
-from flight_alert_scraper.models.flight import BookingLinks, FlightOption, Layover, Leg
+from flight_alert_scraper.models.flight import FlightOption, Layover, Leg
 from flight_alert_scraper.models.query import SearchQuery
 from flight_alert_scraper.scrapers.base import ConfigError, ParseError, TransientError
 from flight_alert_scraper.scrapers.links import build_links
@@ -58,7 +59,7 @@ class SerpApiProvider:
 
         data = resp.json()
         flights_raw = data.get("best_flights", []) + data.get("other_flights", [])
-        scraped_at = datetime.now(tz=timezone.utc)
+        scraped_at = datetime.now(tz=UTC)
 
         results: list[FlightOption] = []
         for item in flights_raw:
@@ -73,7 +74,9 @@ class SerpApiProvider:
         return results
 
 
-def _parse_item(item: dict, query: SearchQuery, scraped_at: datetime) -> FlightOption:
+def _parse_item(
+    item: dict[str, Any], query: SearchQuery, scraped_at: datetime
+) -> FlightOption:
     price = Decimal(str(item["price"])).quantize(Decimal("0.01"))
     total_minutes = item.get("total_duration", 0)
     legs: list[Leg] = []

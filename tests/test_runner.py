@@ -1,33 +1,31 @@
 """End-to-end test using FixtureProvider and in-memory SQLite."""
 from __future__ import annotations
 
-from datetime import date
-from decimal import Decimal
-
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
-from tests.conftest import make_direct_flight, make_query
-from flight_alert_scraper.db.engine import migrate
 from flight_alert_scraper.db.repo import get_alert_state, get_recent_runs
-from flight_alert_scraper.models.alert import AlertKind
-from flight_alert_scraper.notifications.base import Notifier
 from flight_alert_scraper.runner import run_query
 from flight_alert_scraper.scrapers.chain import ProviderChain
 from flight_alert_scraper.scrapers.fixture import FixtureProvider
+from tests.conftest import make_direct_flight, make_query
 
 
 class _CapturingNotifier:
     def __init__(self):
         self.sent: list[tuple[str, str]] = []
 
-    def send(self, recipient: str, subject: str, html_body: str, text_body: str) -> None:
+    def send(
+        self, recipient: str, subject: str, html_body: str, text_body: str
+    ) -> None:
         self.sent.append((recipient, subject))
 
 
 @pytest.fixture()
 def in_memory_session():
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    engine = create_engine(
+        "sqlite:///:memory:", connect_args={"check_same_thread": False}
+    )
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         yield session
@@ -70,3 +68,37 @@ def test_scrape_run_recorded(in_memory_session):
     assert len(runs) == 1
     assert runs[0].status == "ok"
     assert runs[0].tier1_count == 1
+
+
+def test_snapshots_written_after_run(in_memory_session):
+    from flight_alert_scraper.db.repo import get_latest_run, get_snapshots_for_run
+
+    flight = make_direct_flight("1100", 1200)
+    chain = ProviderChain([FixtureProvider([flight])])
+    query = make_query()
+
+    run_query(query, chain, in_memory_session, None)
+
+    latest = get_latest_run(in_memory_session, query.query_key)
+    assert latest is not None
+    assert latest.id is not None
+    snaps = get_snapshots_for_run(in_memory_session, latest.id)
+    assert len(snaps) >= 1
+
+
+def test_snapshot_failure_does_not_break_run(in_memory_session):
+    """A broken save_snapshots must not prevent the run from completing."""
+    import unittest.mock as mock
+
+    flight = make_direct_flight("1100", 1200)
+    chain = ProviderChain([FixtureProvider([flight])])
+    query = make_query()
+
+    with mock.patch(
+        "flight_alert_scraper.db.repo.save_snapshots",
+        side_effect=RuntimeError("boom"),
+    ):
+        run_query(query, chain, in_memory_session, None)
+
+    runs = get_recent_runs(in_memory_session, query.query_key)
+    assert runs[0].status == "ok"

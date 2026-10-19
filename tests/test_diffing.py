@@ -3,17 +3,14 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-import pytest
-
-from tests.conftest import make_direct_flight, make_query
 from flight_alert_scraper.engine.diffing import (
-    extract_prices,
     is_negligible_change_prices,
     is_new_tier1,
     is_price_drop,
     results_fingerprint,
 )
 from flight_alert_scraper.engine.ranking import rank
+from tests.conftest import make_direct_flight, make_query
 
 
 def _ranked_with_flights(flights, max_price="1200", max_duration=1320):
@@ -40,14 +37,18 @@ def test_negligible_change_within_threshold():
     sig = "abc123"
     new_prices = {sig: Decimal("1010")}
     old_prices = {sig: Decimal("1000")}
-    assert is_negligible_change_prices(new_prices, old_prices, threshold_pct=Decimal("0.03"))
+    assert is_negligible_change_prices(
+        new_prices, old_prices, threshold_pct=Decimal("0.03")
+    )
 
 
 def test_negligible_change_exceeds_threshold():
     sig = "abc123"
     new_prices = {sig: Decimal("1050")}
     old_prices = {sig: Decimal("1000")}
-    assert not is_negligible_change_prices(new_prices, old_prices, threshold_pct=Decimal("0.03"))
+    assert not is_negligible_change_prices(
+        new_prices, old_prices, threshold_pct=Decimal("0.03")
+    )
 
 
 def test_negligible_change_different_sigs_not_negligible():
@@ -80,4 +81,6 @@ def test_price_drop_below_threshold_not_detected():
     f = make_direct_flight("1060", 1200)
     ranked = _ranked_with_flights([f])
     sig = ranked.tier1[0].option.signature
-    assert not is_price_drop(ranked, sig, Decimal("1100"), threshold_pct=Decimal("0.05"))
+    assert not is_price_drop(
+        ranked, sig, Decimal("1100"), threshold_pct=Decimal("0.05")
+    )

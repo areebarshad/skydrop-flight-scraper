@@ -17,7 +17,9 @@ class SmtpNotifier:
         self._user = user
         self._password = app_password
 
-    def send(self, recipient: str, subject: str, html_body: str, text_body: str) -> None:
+    def send(
+        self, recipient: str, subject: str, html_body: str, text_body: str
+    ) -> None:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = self._user

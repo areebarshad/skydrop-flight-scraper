@@ -14,7 +14,9 @@ _CARRIER_URL_TEMPLATES: dict[str, str] = {
 }
 
 
-def build_links(query: SearchQuery, carrier_codes: list[str] | None = None) -> BookingLinks:
+def build_links(
+    query: SearchQuery, carrier_codes: list[str] | None = None
+) -> BookingLinks:
     tfs = encode_tfs(query)
     google = f"https://www.google.com/travel/flights/search?tfs={tfs}&curr=USD&gl=us"
 

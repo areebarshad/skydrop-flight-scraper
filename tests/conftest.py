@@ -1,12 +1,10 @@
 """Shared fixtures for all tests."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
-import pytest
-
-from flight_alert_scraper.models.flight import BookingLinks, FlightOption, Layover, Leg
+from flight_alert_scraper.models.flight import BookingLinks, FlightOption, Leg
 from flight_alert_scraper.models.query import CabinClass, Constraints, SearchQuery
 
 
@@ -23,8 +21,8 @@ def make_direct_flight(
     carrier_code: str = "PK",
     flight_num: str = "785",
 ) -> FlightOption:
-    now = datetime(2026, 11, 1, 10, 0, 0, tzinfo=timezone.utc)
-    arrive = datetime.fromtimestamp(now.timestamp() + duration_minutes * 60, tz=timezone.utc)
+    now = datetime(2026, 11, 1, 10, 0, 0, tzinfo=UTC)
+    arrive = datetime.fromtimestamp(now.timestamp() + duration_minutes * 60, tz=UTC)
     leg = Leg(
         carrier="Test Airline",
         carrier_code=carrier_code,

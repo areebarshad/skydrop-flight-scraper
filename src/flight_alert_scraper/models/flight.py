@@ -68,7 +68,7 @@ class FlightOption(BaseModel):
         return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
     @model_validator(mode="after")
-    def _check_consistency(self) -> "FlightOption":
+    def _check_consistency(self) -> FlightOption:
         if len(self.layovers) != len(self.legs) - 1:
             raise ValueError(
                 f"Expected {len(self.legs) - 1} layovers for {len(self.legs)} legs, "

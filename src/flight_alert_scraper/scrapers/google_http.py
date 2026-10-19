@@ -6,7 +6,7 @@ import json
 import logging
 import random
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -32,7 +32,8 @@ _ARTIFACTS = Path("artifacts")
 def _load_cookies() -> dict[str, str]:
     if _COOKIE_JAR.exists():
         try:
-            return json.loads(_COOKIE_JAR.read_text())
+            data: dict[str, str] = json.loads(_COOKIE_JAR.read_text())
+            return data
         except Exception:
             pass
     return {"CONSENT": "YES+cb.20210720-07-p0.en+FX+410"}
@@ -42,12 +43,13 @@ def _save_cookies(jar: httpx.Cookies) -> None:
     _COOKIE_JAR.parent.mkdir(parents=True, exist_ok=True)
     data: dict[str, str] = {}
     for cookie in jar.jar:  # iterate the underlying http.cookiejar.CookieJar
-        data[cookie.name] = cookie.value
+        if cookie.value is not None:
+            data[cookie.name] = cookie.value
     _COOKIE_JAR.write_text(json.dumps(data))
 
 
 def _save_artifact(html: str, label: str) -> None:
-    ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     dest = _ARTIFACTS / ts
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / f"{label}.html.gz"
@@ -103,7 +105,7 @@ class GoogleHttpProvider:
         log.info("google_http fetching %s", url)
         html = self._fetch(url)
         _save_artifact(html, "response")
-        scraped_at = datetime.now(tz=timezone.utc)
+        scraped_at = datetime.now(tz=UTC)
         try:
             results = parse_html(html, query, scraped_at)
         except ParseError:

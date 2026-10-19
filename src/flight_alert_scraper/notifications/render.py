@@ -48,7 +48,9 @@ def render_subject(decision: AlertDecision) -> str:
         return f"[Tier 1] {route} — price update ${best.option.price_usd:.0f}"
     else:
         c = q.constraints
-        limit_str = f"{c.max_duration_minutes // 60}h" if c.max_duration_minutes else "no limit"
+        limit_str = (
+            f"{c.max_duration_minutes // 60}h" if c.max_duration_minutes else "no limit"
+        )
         return (
             f"[Digest] {route} — no match under {limit_str}/${c.max_price_usd:.0f}; "
             + (

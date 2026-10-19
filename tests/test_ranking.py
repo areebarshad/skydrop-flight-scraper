@@ -4,13 +4,12 @@ Covers every bullet from §3 'behaviors worth pinning'.
 """
 from __future__ import annotations
 
+from datetime import UTC
 from decimal import Decimal
 
-import pytest
-
-from tests.conftest import make_direct_flight, make_query
 from flight_alert_scraper.engine.ranking import rank
-from flight_alert_scraper.models.result import MatchLabel, Tier
+from flight_alert_scraper.models.result import MatchLabel
+from tests.conftest import make_direct_flight, make_query
 
 
 def test_empty_options_all_tiers_empty():
@@ -127,23 +126,32 @@ def test_tier3_flight_can_have_multiple_labels():
 
 def test_max_stops_hard_filter():
     """max_stops filters flights before anything else."""
-    from datetime import datetime, timezone
+    from datetime import date, datetime
+
     from flight_alert_scraper.models.flight import FlightOption, Layover, Leg
-    from tests.conftest import make_links
     from flight_alert_scraper.models.query import CabinClass, Constraints, SearchQuery
-    from datetime import date
+    from tests.conftest import make_links
 
     query = SearchQuery(
         origin="IAD", destination="KHI", depart_date=date(2026, 12, 1),
         cabin=CabinClass.ECONOMY, adults=1,
         constraints=Constraints(max_price_usd=Decimal("2000"), max_stops=0),
     )
-    now = datetime(2026, 11, 1, 10, 0, tzinfo=timezone.utc)
-    leg1 = Leg(carrier="A", carrier_code="AA", flight_number="1", origin="IAD", destination="DXB",
-               depart_at=now, arrive_at=datetime.fromtimestamp(now.timestamp() + 600*60, tz=timezone.utc), duration_minutes=600)
-    leg2 = Leg(carrier="A", carrier_code="AA", flight_number="2", origin="DXB", destination="KHI",
-               depart_at=datetime.fromtimestamp(now.timestamp() + 660*60, tz=timezone.utc),
-               arrive_at=datetime.fromtimestamp(now.timestamp() + 1080*60, tz=timezone.utc), duration_minutes=420)
+    now = datetime(2026, 11, 1, 10, 0, tzinfo=UTC)
+    leg1 = Leg(
+        carrier="A", carrier_code="AA", flight_number="1",
+        origin="IAD", destination="DXB",
+        depart_at=now,
+        arrive_at=datetime.fromtimestamp(now.timestamp() + 600 * 60, tz=UTC),
+        duration_minutes=600,
+    )
+    leg2 = Leg(
+        carrier="A", carrier_code="AA", flight_number="2",
+        origin="DXB", destination="KHI",
+        depart_at=datetime.fromtimestamp(now.timestamp() + 660 * 60, tz=UTC),
+        arrive_at=datetime.fromtimestamp(now.timestamp() + 1080 * 60, tz=UTC),
+        duration_minutes=420,
+    )
     layover = Layover(airport="DXB", duration_minutes=60)
     one_stop = FlightOption(
         legs=[leg1, leg2], layovers=[layover],
@@ -155,7 +163,9 @@ def test_max_stops_hard_filter():
 
     ranked = rank([one_stop, direct], query)
     assert ranked.filtered_out == 1
-    sigs_in_results = {m.option.signature for m in ranked.tier1 + ranked.tier2 + ranked.tier3}
+    sigs_in_results = {
+        m.option.signature for m in ranked.tier1 + ranked.tier2 + ranked.tier3
+    }
     assert one_stop.signature not in sigs_in_results
 
 

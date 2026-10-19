@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Email preview &mdash; skydrop{% endblock %}
+{% block content %}
+<div class="email-preview-page">
+  <h1>Email preview</h1>
+  <p class="subject-line"><strong>Subject:</strong> {{ subject }}</p>
+  <p class="preview-note">Read-only preview of the email that would be sent. No email was sent.</p>
+  <iframe class="email-iframe" sandbox="allow-same-origin" srcdoc="{{ email_body | e }}"></iframe>
+</div>
+{% endblock %}

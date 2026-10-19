@@ -1,20 +1,17 @@
 """Tests for notification decision logic with time-machine."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-import pytest
-import time_machine
-
-from tests.conftest import make_direct_flight, make_query
 from flight_alert_scraper.db.tables import AlertState
 from flight_alert_scraper.engine.diffing import results_fingerprint
 from flight_alert_scraper.engine.ranking import rank
 from flight_alert_scraper.models.alert import AlertKind, SuppressReason, TriggerReason
 from flight_alert_scraper.notifications.decide import decide
+from tests.conftest import make_direct_flight, make_query
 
-_NOW = datetime(2026, 12, 1, 12, 0, 0, tzinfo=timezone.utc)
+_NOW = datetime(2026, 12, 1, 12, 0, 0, tzinfo=UTC)
 
 
 def _make_state(ranked, last_digest=None, last_immediate=None) -> AlertState:
@@ -132,7 +129,7 @@ def test_empty_results_suppressed():
 
 
 def test_four_unchanged_runs_at_most_one_email():
-    """Simulate 4 consecutive runs with same data — should send on first, suppress rest."""
+    """Simulate 4 consecutive runs with same data — send on first, suppress rest."""
     f = make_direct_flight("1100", 1200)
     ranked = _rank([f])
     state = None

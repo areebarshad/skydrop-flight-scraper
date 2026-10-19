@@ -102,7 +102,9 @@ def encode(query: SearchQuery) -> str:
         flights.append(
             _encode_flight_data(query.return_date, query.destination, query.origin)
         )
-    info = _encode_info(flights, query.adults, query.cabin, query.return_date is not None)
+    info = _encode_info(
+        flights, query.adults, query.cabin, query.return_date is not None
+    )
     return base64.urlsafe_b64encode(info).rstrip(b"=").decode()
 
 

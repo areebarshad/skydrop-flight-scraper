@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlmodel import Session
@@ -25,8 +25,12 @@ from flight_alert_scraper.models.alert import AlertKind
 from flight_alert_scraper.models.query import SearchQuery
 from flight_alert_scraper.notifications.base import Notifier
 from flight_alert_scraper.notifications.decide import decide
-from flight_alert_scraper.notifications.render import render_html, render_subject, render_text
-from flight_alert_scraper.scrapers.chain import ChainMetrics, ProviderChain
+from flight_alert_scraper.notifications.render import (
+    render_html,
+    render_subject,
+    render_text,
+)
+from flight_alert_scraper.scrapers.chain import ProviderChain
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +44,7 @@ def run_query(
 ) -> None:
     upsert_watched_query(session, query)
     scrape_run = start_run(session, query.query_key)
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
 
     try:
         results, metrics = chain.search(query)
@@ -79,7 +83,9 @@ def run_query(
 
         if dry_run:
             _write_preview(subject, html_body, text_body)
-        elif notifier is not None and not alert_already_sent(session, payload_hash, query.query_key):
+        elif notifier is not None and not alert_already_sent(
+            session, payload_hash, query.query_key
+        ):
             try:
                 notifier.send(recipient, subject, html_body, text_body)
                 log_alert(
@@ -140,12 +146,18 @@ def run_query(
     )
     save_alert_state(session, new_state)
     finish_run(session, scrape_run, ranked, provider, "ok")
+    try:
+        assert scrape_run.id is not None
+        from flight_alert_scraper.db.repo import save_snapshots
+        save_snapshots(session, scrape_run.id, query.query_key, ranked, now)
+    except Exception as _snap_exc:
+        log.error("Failed to save snapshots: %s", _snap_exc)
 
 
 def _write_preview(subject: str, html_body: str, text_body: str) -> None:
     preview_dir = Path("artifacts/preview")
     preview_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     (preview_dir / f"{ts}_subject.txt").write_text(subject, encoding="utf-8")
     (preview_dir / f"{ts}_email.html").write_text(html_body, encoding="utf-8")
     (preview_dir / f"{ts}_email.txt").write_text(text_body, encoding="utf-8")

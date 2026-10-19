@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlalchemy import Engine
 from sqlmodel import Session, SQLModel, create_engine
 
-_engine = None
+_engine: Engine | None = None
 
 
-def get_engine(db_path: Path | str = "./flight_alerts.db"):
+def get_engine(db_path: Path | str = "./flight_alerts.db") -> Engine:
     global _engine
     if _engine is None:
         url = f"sqlite:///{db_path}"
@@ -16,7 +17,9 @@ def get_engine(db_path: Path | str = "./flight_alerts.db"):
 
 
 def migrate(db_path: Path | str = "./flight_alerts.db") -> None:
-    from flight_alert_scraper.db import tables as _  # noqa: F401 — register table metadata
+    from flight_alert_scraper.db import (
+        tables as _,  # noqa: F401 — register table metadata
+    )
 
     eng = get_engine(db_path)
     SQLModel.metadata.create_all(eng)

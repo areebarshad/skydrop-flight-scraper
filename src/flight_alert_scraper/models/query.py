@@ -55,7 +55,9 @@ class SearchQuery(BaseModel):
                 "origin": self.origin,
                 "destination": self.destination,
                 "depart_date": self.depart_date.isoformat(),
-                "return_date": self.return_date.isoformat() if self.return_date else None,
+                "return_date": (
+                    self.return_date.isoformat() if self.return_date else None
+                ),
                 "cabin": self.cabin,
                 "adults": self.adults,
             },
@@ -64,7 +66,7 @@ class SearchQuery(BaseModel):
         return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
     @model_validator(mode="after")
-    def _check_dates(self) -> "SearchQuery":
+    def _check_dates(self) -> SearchQuery:
         if self.return_date is not None and self.return_date < self.depart_date:
             raise ValueError("return_date must be >= depart_date")
         return self
