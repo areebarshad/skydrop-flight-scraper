@@ -4,29 +4,51 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}skydrop{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js" defer></script>
 </head>
 <body>
-<nav class="nav">
-  <a class="nav-brand" href="/">&#x2708; skydrop</a>
-  <div class="nav-routes">
-    {% for r in all_routes %}
-    <a class="nav-route {% if r.query_key == query_key %}active{% endif %}"
-       href="/routes/{{ r.query_key }}">
-      {{ r.origin }}&rarr;{{ r.destination }}
+
+<!-- Ambient background mesh -->
+<div class="ambient-mesh" aria-hidden="true">
+  <div class="orb-3"></div>
+</div>
+
+<!-- Floating glass navbar -->
+<div class="nav-wrapper">
+  <nav class="nav">
+    <a class="nav-brand" href="/">
+      <div class="nav-brand-icon">&#x2708;</div>
+      skydrop
     </a>
-    {% endfor %}
-  </div>
-  <div class="nav-actions">
-    <a class="btn btn-sm" href="/settings">Settings</a>
-  </div>
-</nav>
+    <div class="nav-divider"></div>
+    <div class="nav-routes">
+      {% for r in all_routes %}
+      <a class="nav-route {% if r.query_key == query_key %}active{% endif %}"
+         href="/routes/{{ r.query_key }}">
+        {{ r.origin }}&thinsp;&rarr;&thinsp;{{ r.destination }}
+      </a>
+      {% endfor %}
+    </div>
+    <div class="scraper-status">
+      <div class="pulse-dot"></div>
+      <span>Live</span>
+    </div>
+    <div class="nav-actions">
+      <a class="btn btn-glass btn-sm" href="/settings">Settings</a>
+    </div>
+  </nav>
+</div>
+
 <main class="main">
   {% block content %}{% endblock %}
 </main>
+
 <footer class="footer">
-  <span>skydrop</span>
+  skydrop &mdash; flight price monitor
 </footer>
 </body>
 </html>

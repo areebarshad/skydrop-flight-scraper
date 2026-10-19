@@ -2,13 +2,16 @@
 {% block title %}Settings &mdash; skydrop{% endblock %}
 {% block content %}
 <div class="settings-page">
-  <h1>Watchlist settings</h1>
+  <div class="settings-hero">
+    <h1>Watchlist settings</h1>
+    <p>Configure the routes and constraints skydrop monitors for you.</p>
+  </div>
 
   {% if success %}
-  <div class="alert alert-success">Saved.</div>
+  <div class="alert alert-success">&#x2713; Saved successfully.</div>
   {% endif %}
   {% for err in errors %}
-  <div class="alert alert-error">{{ err }}</div>
+  <div class="alert alert-error">&#x26A0; {{ err }}</div>
   {% endfor %}
 
   <form method="post" action="/settings" class="settings-form" id="wl-form">
@@ -17,13 +20,13 @@
     <div id="query-rows">
     {% for q in queries %}
     {% set i = loop.index0 %}
-    <fieldset class="query-row" id="row-{{ i }}">
+    <fieldset class="glass-card query-row" id="row-{{ i }}">
       <legend>Route {{ loop.index }}</legend>
       <input type="hidden" name="old_query_key_{{ i }}" value="">
 
       <div class="field-row">
-        <label>Origin <input type="text" name="origin_{{ i }}" value="{{ q.origin }}" maxlength="3" required pattern="[A-Z]{3}"></label>
-        <label>Destination <input type="text" name="destination_{{ i }}" value="{{ q.destination }}" maxlength="3" required pattern="[A-Z]{3}"></label>
+        <label>Origin <input type="text" name="origin_{{ i }}" value="{{ q.origin }}" maxlength="3" required pattern="[A-Z]{3}" placeholder="IAD"></label>
+        <label>Destination <input type="text" name="destination_{{ i }}" value="{{ q.destination }}" maxlength="3" required pattern="[A-Z]{3}" placeholder="JFK"></label>
         <label>Depart <input type="date" name="depart_date_{{ i }}" value="{{ q.depart_date }}" required></label>
         <label>Return <input type="date" name="return_date_{{ i }}" value="{{ q.return_date or '' }}"></label>
         <label>Cabin
@@ -37,26 +40,28 @@
       </div>
 
       <details class="constraints-details">
-        <summary>Constraints</summary>
+        <summary>&#x25B8; Advanced constraints</summary>
         <div class="field-row">
-          <label>Max price ($) <input type="text" name="max_price_usd_{{ i }}" value="{{ q.constraints.max_price_usd }}"></label>
-          <label>Max duration (min) <input type="number" name="max_duration_minutes_{{ i }}" value="{{ q.constraints.max_duration_minutes or '' }}"></label>
-          <label>Max stops <input type="number" name="max_stops_{{ i }}" value="{{ q.constraints.max_stops or '' }}" min="0"></label>
-          <label>Value deal discount <input type="text" name="value_deal_discount_{{ i }}" value="{{ q.constraints.value_deal_discount }}"></label>
-          <label>Value deal buf (min) <input type="number" name="value_deal_duration_buffer_minutes_{{ i }}" value="{{ q.constraints.value_deal_duration_buffer_minutes }}"></label>
-          <label>Time saver overage <input type="text" name="time_saver_price_overage_{{ i }}" value="{{ q.constraints.time_saver_price_overage }}"></label>
-          <label>$/hr penalty <input type="text" name="hourly_time_penalty_usd_{{ i }}" value="{{ q.constraints.hourly_time_penalty_usd }}"></label>
+          <label>Max price ($) <input type="text" name="max_price_usd_{{ i }}" value="{{ q.constraints.max_price_usd }}" placeholder="1200"></label>
+          <label>Max duration (min) <input type="number" name="max_duration_minutes_{{ i }}" value="{{ q.constraints.max_duration_minutes or '' }}" placeholder="none"></label>
+          <label>Max stops <input type="number" name="max_stops_{{ i }}" value="{{ q.constraints.max_stops or '' }}" min="0" placeholder="any"></label>
+          <label>Value deal discount <input type="text" name="value_deal_discount_{{ i }}" value="{{ q.constraints.value_deal_discount }}" placeholder="0.20"></label>
+          <label>Value deal buf (min) <input type="number" name="value_deal_duration_buffer_minutes_{{ i }}" value="{{ q.constraints.value_deal_duration_buffer_minutes }}" placeholder="180"></label>
+          <label>Time saver overage <input type="text" name="time_saver_price_overage_{{ i }}" value="{{ q.constraints.time_saver_price_overage }}" placeholder="0.10"></label>
+          <label>$/hr penalty <input type="text" name="hourly_time_penalty_usd_{{ i }}" value="{{ q.constraints.hourly_time_penalty_usd }}" placeholder="20.00"></label>
         </div>
       </details>
 
-      <button type="button" class="btn btn-sm btn-danger" onclick="removeRow({{ i }})">Remove</button>
+      <div style="margin-top: 16px;">
+        <button type="button" class="btn btn-sm btn-danger" onclick="removeRow({{ i }})">Remove route</button>
+      </div>
     </fieldset>
     {% endfor %}
     </div>
 
     <div class="settings-actions">
-      <button type="button" class="btn btn-secondary" onclick="addRow()">+ Add route</button>
-      <button type="submit" class="btn btn-primary">Save</button>
+      <button type="button" class="btn btn-glass" onclick="addRow()">+ Add route</button>
+      <button type="submit" class="btn btn-primary">Save watchlist</button>
     </div>
   </form>
 </div>
@@ -71,13 +76,13 @@ function addRow() {
   var i = parseInt(document.getElementById('num-queries').value);
   var div = document.getElementById('query-rows');
   var fs = document.createElement('fieldset');
-  fs.className = 'query-row';
+  fs.className = 'glass-card query-row';
   fs.id = 'row-' + i;
   fs.innerHTML = '<legend>Route ' + (i+1) + '</legend>' +
     '<input type="hidden" name="old_query_key_' + i + '" value="">' +
     '<div class="field-row">' +
-    '<label>Origin <input type="text" name="origin_' + i + '" maxlength="3" required pattern="[A-Z]{3}"></label>' +
-    '<label>Destination <input type="text" name="destination_' + i + '" maxlength="3" required pattern="[A-Z]{3}"></label>' +
+    '<label>Origin <input type="text" name="origin_' + i + '" maxlength="3" required pattern="[A-Z]{3}" placeholder="IAD"></label>' +
+    '<label>Destination <input type="text" name="destination_' + i + '" maxlength="3" required pattern="[A-Z]{3}" placeholder="JFK"></label>' +
     '<label>Depart <input type="date" name="depart_date_' + i + '" required></label>' +
     '<label>Return <input type="date" name="return_date_' + i + '"></label>' +
     '<label>Cabin <select name="cabin_' + i + '">' +
@@ -88,17 +93,17 @@ function addRow() {
     '</select></label>' +
     '<label>Adults <input type="number" name="adults_' + i + '" value="1" min="1" max="9" required></label>' +
     '</div>' +
-    '<details class="constraints-details"><summary>Constraints</summary>' +
+    '<details class="constraints-details"><summary>&#x25B8; Advanced constraints</summary>' +
     '<div class="field-row">' +
-    '<label>Max price ($) <input type="text" name="max_price_usd_' + i + '" value="1200"></label>' +
-    '<label>Max duration (min) <input type="number" name="max_duration_minutes_' + i + '"></label>' +
-    '<label>Max stops <input type="number" name="max_stops_' + i + '" min="0"></label>' +
-    '<label>Value deal discount <input type="text" name="value_deal_discount_' + i + '" value="0.20"></label>' +
-    '<label>Value deal buf (min) <input type="number" name="value_deal_duration_buffer_minutes_' + i + '" value="180"></label>' +
-    '<label>Time saver overage <input type="text" name="time_saver_price_overage_' + i + '" value="0.10"></label>' +
-    '<label>$/hr penalty <input type="text" name="hourly_time_penalty_usd_' + i + '" value="20.00"></label>' +
+    '<label>Max price ($) <input type="text" name="max_price_usd_' + i + '" value="1200" placeholder="1200"></label>' +
+    '<label>Max duration (min) <input type="number" name="max_duration_minutes_' + i + '" placeholder="none"></label>' +
+    '<label>Max stops <input type="number" name="max_stops_' + i + '" min="0" placeholder="any"></label>' +
+    '<label>Value deal discount <input type="text" name="value_deal_discount_' + i + '" value="0.20" placeholder="0.20"></label>' +
+    '<label>Value deal buf (min) <input type="number" name="value_deal_duration_buffer_minutes_' + i + '" value="180" placeholder="180"></label>' +
+    '<label>Time saver overage <input type="text" name="time_saver_price_overage_' + i + '" value="0.10" placeholder="0.10"></label>' +
+    '<label>$/hr penalty <input type="text" name="hourly_time_penalty_usd_' + i + '" value="20.00" placeholder="20.00"></label>' +
     '</div></details>' +
-    '<button type="button" class="btn btn-sm btn-danger" onclick="removeRow(' + i + ')">Remove</button>';
+    '<div style="margin-top:16px;"><button type="button" class="btn btn-sm btn-danger" onclick="removeRow(' + i + ')">Remove route</button></div>';
   div.appendChild(fs);
   document.getElementById('num-queries').value = i + 1;
 }
