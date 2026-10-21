@@ -52,6 +52,19 @@ class ProviderChain:
             log.info("Trying provider: %s", provider.name)
             try:
                 results = provider.search(query)
+                if not results:
+                    log.warning(
+                        "Provider %s returned 0 results, trying next",
+                        provider.name,
+                    )
+                    metrics.attempts.append(
+                        ProviderResult(
+                            provider=provider.name,
+                            results=[],
+                            error="returned 0 results",
+                        )
+                    )
+                    continue
                 metrics.attempts.append(
                     ProviderResult(provider=provider.name, results=results)
                 )

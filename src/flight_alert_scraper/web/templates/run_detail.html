@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Run {{ run.id }} &mdash; skydrop{% endblock %}
+{% block content %}
+<div class="dashboard">
+
+  <div style="margin-bottom: 16px;">
+    <a class="btn btn-sm btn-glass" href="/logs/{{ query_key }}">&#x2190; Back to flight</a>
+  </div>
+
+  <div class="page-header">
+    <div>
+      {% if wq %}
+      <div class="route-badge">
+        <span class="route-iata">{{ wq.origin }}</span>
+        <span class="route-arrow">&#x2192;</span>
+        <span class="route-iata">{{ wq.destination }}</span>
+      </div>
+      {% endif %}
+      <div class="last-checked">
+        {{ run.started_at.strftime("%Y-%m-%d %H:%M") }}
+        &middot; {{ run.provider or "unknown" }}
+        &middot; T1: {{ run.tier1_count }} T2: {{ run.tier2_count }} / {{ run.candidates_found }} candidates
+      </div>
+      {% if run.error_message %}
+      <div class="run-error-banner" style="margin-top:8px;">
+        <strong>Error:</strong> {{ run.error_message }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <section class="section">
+    <div class="section-header">
+      <span class="section-title">Flights from this run</span>
+    </div>
+    {% if not ranked_cards %}
+    <div class="glass-card">
+      <p class="empty-state">No candidates recorded for this run.</p>
+    </div>
+    {% else %}
+    <div class="ranked-list">
+      {% for card in ranked_cards %}
+      <div class="ranked-row tier-card-{{ card.tier }}">
+        <div class="rank-num">#{{ loop.index }}</div>
+        <div class="ranked-price">{{ card.price }}</div>
+        <div class="ranked-meta">
+          {{ card.duration }}
+          &middot; {{ card.stops }} stop{% if card.stops != 1 %}s{% endif %}
+          &middot; {{ card.carriers }}
+        </div>
+        <div class="ranked-labels">
+          <span class="badge badge-sm tier-badge-{{ card.tier }}">Tier {{ card.tier }}</span>
+          {% for lbl in card.labels %}
+          <span class="badge badge-sm tier-badge-{{ card.tier }}">{{ lbl.replace("_", " ") }}</span>
+          {% endfor %}
+          <span class="ranked-eff">eff. {{ card.effective_cost }}</span>
+        </div>
+        <div class="ranked-book">
+          <a class="btn btn-xs btn-book" href="{{ card.booking_link }}" target="_blank" rel="noopener">Book &#x25B8;</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+
+</div>
+{% endblock %}

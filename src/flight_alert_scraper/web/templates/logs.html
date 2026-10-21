@@ -46,15 +46,71 @@
       </div>
     </div>
     <div class="log-row-actions" onclick="event.preventDefault()">
-      <a class="btn btn-sm btn-glass" href="/logs/{{ row.query_key }}/edit">Edit</a>
+      <a class="btn-icon btn-glass"
+         href="/logs/{{ row.query_key }}/edit"
+         aria-label="Edit flight"
+         title="Edit flight">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M11.5 2.5a1.5 1.5 0 0 1 2.12 2.12L5 13.25l-3 .75.75-3L11.5 2.5z"
+                stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
       <form method="post" action="/logs/{{ row.query_key }}/delete"
             onsubmit="return confirm('Remove this flight from your watchlist?')">
-        <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+        <button type="submit"
+                class="btn-icon btn-danger"
+                aria-label="Remove flight"
+                title="Remove flight">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 9a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-9"
+                  stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
       </form>
     </div>
   </a>
   {% endfor %}
   {% endif %}
+
+  <!-- Settings -->
+  <div id="settings" class="settings-section glass-card">
+    <h2 class="settings-title">Settings</h2>
+    <p class="settings-note">Saved to <code>.env</code> (excluded from version control).</p>
+
+    {% if settings_error %}
+    <div class="settings-error">{{ settings_error }}</div>
+    {% endif %}
+
+    <form method="post" action="/logs/settings" class="settings-form">
+      <div class="settings-field">
+        <label for="smtp_user">SMTP user</label>
+        <input type="text" id="smtp_user" name="smtp_user"
+               value="{{ env.get('SMTP_USER', '') }}"
+               placeholder="you@gmail.com">
+      </div>
+      <div class="settings-field">
+        <label for="smtp_app_password">SMTP app password</label>
+        <input type="password" id="smtp_app_password" name="smtp_app_password"
+               placeholder="blank to keep current">
+        <span class="settings-hint">
+          {% if env.get('SMTP_APP_PASSWORD') %}configured &#x2713;{% else %}not set{% endif %}
+        </span>
+      </div>
+      <div class="settings-field">
+        <label for="alert_recipient">Alert recipient</label>
+        <input type="text" id="alert_recipient" name="alert_recipient"
+               value="{{ env.get('ALERT_RECIPIENT', '') }}"
+               placeholder="you@example.com">
+      </div>
+      <div class="settings-field">
+        <label for="serpapi_key">SerpApi key</label>
+        <input type="text" id="serpapi_key" name="serpapi_key"
+               value="{{ env.get('SERPAPI_KEY', '') }}"
+               placeholder="optional">
+      </div>
+      <button type="submit" class="btn btn-primary">Save settings</button>
+    </form>
+  </div>
 
 </div>
 {% endblock %}

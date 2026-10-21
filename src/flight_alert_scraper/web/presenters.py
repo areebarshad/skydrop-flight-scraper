@@ -58,7 +58,7 @@ def snapshot_to_card(snap: FlightSnapshot) -> dict[str, Any]:
 
 
 def build_price_svg(history: list[PriceHistoryPoint], budget: Decimal) -> str | None:
-    if len(history) < 2:
+    if not history:
         return None
     W, H = 600, 130
     PT, PR, PB, PL = 10, 15, 30, 55
@@ -76,15 +76,38 @@ def build_price_svg(history: list[PriceHistoryPoint], budget: Decimal) -> str | 
     n = len(history)
 
     def px(i: int) -> float:
+        if n == 1:
+            return PL + chart_w / 2.0
         return PL + (i / (n - 1)) * chart_w
 
     def py(price: float) -> float:
         return PT + chart_h - (price - min_p) / p_range * chart_h
 
-    overall_pts = " ".join(
-        f"{px(i):.1f},{py(float(h['min_overall_price'])):.1f}"
-        for i, h in enumerate(history)
-    )
+    budget_y = py(float(budget))
+    first_label = history[0]["observed_at"].strftime("%b %d")
+    last_label = history[-1]["observed_at"].strftime("%b %d")
+
+    ns = 'xmlns="http://www.w3.org/2000/svg"'
+    parts = [
+        f'<svg viewBox="0 0 {W} {H}" {ns} class="price-chart" aria-hidden="true">'
+    ]
+    overall_stroke = 'stroke="var(--c-line-overall)" stroke-width="1.5" opacity="0.5"'
+    if n == 1:
+        ox = px(0)
+        oy = py(float(history[0]["min_overall_price"]))
+        parts.append(
+            f'  <circle cx="{ox:.1f}" cy="{oy:.1f}" r="3.5"'
+            ' fill="var(--c-line-overall)" opacity="0.5"/>'
+        )
+    else:
+        overall_pts = " ".join(
+            f"{px(i):.1f},{py(float(h['min_overall_price'])):.1f}"
+            for i, h in enumerate(history)
+        )
+        parts.append(
+            f'  <polyline points="{overall_pts}" fill="none" {overall_stroke}/>'
+        )
+
     tier1_segs: list[list[str]] = []
     seg: list[str] = []
     for i, h in enumerate(history):
@@ -97,18 +120,6 @@ def build_price_svg(history: list[PriceHistoryPoint], budget: Decimal) -> str | 
     if seg:
         tier1_segs.append(seg)
 
-    budget_y = py(float(budget))
-    first_label = history[0]["observed_at"].strftime("%b %d")
-    last_label = history[-1]["observed_at"].strftime("%b %d")
-
-    ns = 'xmlns="http://www.w3.org/2000/svg"'
-    parts = [
-        f'<svg viewBox="0 0 {W} {H}" {ns} class="price-chart" aria-hidden="true">'
-    ]
-    overall_stroke = 'stroke="var(--c-line-overall)" stroke-width="1.5" opacity="0.5"'
-    parts.append(
-        f'  <polyline points="{overall_pts}" fill="none" {overall_stroke}/>'
-    )
     t1_stroke = 'stroke="var(--c-line-tier1)" stroke-width="2.5"'
     for s in tier1_segs:
         if len(s) >= 2:

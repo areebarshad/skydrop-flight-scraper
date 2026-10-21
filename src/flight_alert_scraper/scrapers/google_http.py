@@ -73,7 +73,6 @@ class GoogleHttpProvider:
                 headers={
                     "User-Agent": _UA,
                     "Accept-Language": "en-US,en;q=0.9",
-                    "Accept-Encoding": "gzip, deflate, br",
                 },
                 cookies=cookies,
                 http2=True,
@@ -98,7 +97,12 @@ class GoogleHttpProvider:
             raise TransientError(f"HTTP {resp.status_code} from {url}")
         if resp.status_code >= 400:
             raise BlockedError(f"HTTP {resp.status_code} from {url}")
-        return resp.text
+        body = resp.text
+        snippet = body[:2048].lower()
+        if "<html" not in snippet and "<!doctype" not in snippet:
+            enc = resp.headers.get("content-encoding", "none")
+            raise ParseError(f"response body is not HTML (Content-Encoding: {enc})")
+        return body
 
     def search(self, query: SearchQuery) -> list[FlightOption]:
         url = build_url(query)

@@ -8,6 +8,12 @@
     <a class="btn btn-sm btn-glass" href="/logs">&#x2190; All flights</a>
   </div>
 
+  {% if first_run_error %}
+  <div class="run-error-banner">
+    <strong>Last run error:</strong> {{ first_run_error }}
+  </div>
+  {% endif %}
+
   <!-- Page Header -->
   <div class="page-header">
     <div>
@@ -25,7 +31,11 @@
       </div>
     </div>
     <div class="page-header-right">
+      {% if job_id %}
+      {% include "partials/job_status.html" %}
+      {% else %}
       <div id="job-status"></div>
+      {% endif %}
       <button
         class="btn btn-primary"
         hx-post="/logs/{{ query_key }}/check"
@@ -186,13 +196,7 @@
     </div>
     {% else %}
     <div class="glass-card">
-      <p class="empty-state">
-        {% if price_history_count < 2 %}
-          Collecting &mdash; needs 2+ runs with data.
-        {% else %}
-          No snapshot data yet.
-        {% endif %}
-      </p>
+      <p class="empty-state">No snapshot data yet. Run a check to populate.</p>
     </div>
     {% endif %}
   </section>
@@ -244,9 +248,8 @@
         <table class="run-table">
           <thead>
             <tr>
-              <th>Started</th>
-              <th>Provider</th>
-              <th>Status</th>
+              <th>Time</th>
+              <th>Airline</th>
               <th>T1</th>
               <th>T2</th>
               <th>Candidates</th>
@@ -254,10 +257,12 @@
           </thead>
           <tbody>
           {% for run in recent_runs %}
-          <tr>
+          <tr class="run-row{% if run.status == 'error' %} run-row-error{% endif %}"
+              title="{% if run.status == 'error' and run.error_message %}{{ run.error_message }}{% endif %}"
+              onclick="window.location='/logs/{{ query_key }}/runs/{{ run.id }}'"
+              style="cursor:pointer">
             <td>{{ run.started_at.strftime("%Y-%m-%d %H:%M") }}</td>
-            <td>{{ run.provider or "&mdash;" }}</td>
-            <td><span class="status-{{ run.status }}">{{ run.status }}</span></td>
+            <td>{{ cheapest_by_run.get(run.id, "&mdash;") }}</td>
             <td>{{ run.tier1_count }}</td>
             <td>{{ run.tier2_count }}</td>
             <td>{{ run.candidates_found }}</td>

@@ -56,6 +56,14 @@ def run_query(
     provider = metrics.serving_provider
     ranked = rank(results, query)
 
+    diag: str | None = None
+    if not results:
+        parts = [
+            f"{a.provider}: {a.error or 'returned 0 results'}"
+            for a in metrics.attempts
+        ]
+        diag = "; ".join(parts) if parts else "all providers skipped"
+
     alert_state = get_alert_state(session, query.query_key)
     decision = decide(ranked, alert_state, now)
 
@@ -148,7 +156,7 @@ def run_query(
         updated_at=now,
     )
     save_alert_state(session, new_state)
-    finish_run(session, scrape_run, ranked, provider, "ok")
+    finish_run(session, scrape_run, ranked, provider, "ok", diag)
     try:
         assert scrape_run.id is not None
         from flight_alert_scraper.db.repo import save_snapshots

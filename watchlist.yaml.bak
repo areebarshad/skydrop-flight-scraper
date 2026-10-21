@@ -5,7 +5,7 @@ queries:
   cabin: economy
   adults: 1
   constraints:
-    max_price_usd: '1200.00'
+    max_price_usd: '3000.00'
     max_duration_minutes: null
     max_stops: null
     value_deal_discount: '0.20'
