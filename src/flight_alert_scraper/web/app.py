@@ -122,7 +122,7 @@ def create_app(settings: Settings) -> FastAPI:
             },
         )
 
-    @app.post("/logs/new", response_class=HTMLResponse)
+    @app.post("/logs/new", response_class=HTMLResponse, response_model=None)
     async def log_new_post(request: Request) -> HTMLResponse | RedirectResponse:
         form = await request.form()
         try:
@@ -169,7 +169,7 @@ def create_app(settings: Settings) -> FastAPI:
             },
         )
 
-    @app.post("/logs/{query_key}/edit", response_class=HTMLResponse)
+    @app.post("/logs/{query_key}/edit", response_class=HTMLResponse, response_model=None)
     async def log_edit_post(query_key: str, request: Request) -> HTMLResponse | RedirectResponse:
         form = await request.form()
         try:
