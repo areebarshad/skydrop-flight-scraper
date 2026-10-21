@@ -217,6 +217,7 @@ tempCodeRunnerFile.py
 artifacts/
 .cache/
 watchlist.yaml
+watchlist.yaml.bak
 
 # Marimo
 marimo/_static/
