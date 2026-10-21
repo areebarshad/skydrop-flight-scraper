@@ -372,8 +372,10 @@ def create_app(settings: Settings) -> FastAPI:
             cheapest_by_run = get_cheapest_carrier_by_run(session, run_ids)
 
         job_id: str | None = None
+        job: dict | None = None
         if ran is None:
             job_id = _jobs.start_check(query_key)
+            job = _jobs.get_job(job_id)
 
         constraints: dict[str, Any] = json.loads(wq.constraints_json)
         budget = Decimal(str(constraints.get("max_price_usd", "9999")))
@@ -418,6 +420,7 @@ def create_app(settings: Settings) -> FastAPI:
                 "last_checked_str": fmt_relative_time(wq.last_checked_at),
                 "active_tab": "logs",
                 "job_id": job_id,
+                "job": job,
                 "first_run_error": first_run_error,
                 "cheapest_by_run": cheapest_by_run,
             },
