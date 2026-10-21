@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Logs &mdash; skydrop{% endblock %}
+{% block content %}
+<div class="logs-page">
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Tracked Flights</h1>
+    </div>
+    <div class="page-header-right">
+      <a class="btn btn-primary" href="/logs/new">+ Add flight</a>
+    </div>
+  </div>
+
+  {% if not rows %}
+  <div class="glass-card empty-state-card">
+    <p class="empty-state">No flights tracked yet.</p>
+    <a class="btn btn-primary" href="/logs/new">+ Add your first flight</a>
+  </div>
+  {% else %}
+  {% for row in rows %}
+  <a class="glass-card log-row" href="/logs/{{ row.query_key }}">
+    <div class="log-row-route">
+      <div class="route-badge">
+        <span class="route-iata">{{ row.origin }}</span>
+        <span class="route-arrow">&#x2192;</span>
+        <span class="route-iata">{{ row.destination }}</span>
+      </div>
+      <div class="log-row-meta">
+        {{ row.depart_date }}{% if row.return_date %} &ndash; {{ row.return_date }}{% endif %}
+        &middot; {{ row.cabin }} &middot; {{ row.adults }} pax
+      </div>
+    </div>
+    <div class="log-row-stats">
+      <div>
+        <div class="log-row-label">Best fare</div>
+        <div class="log-row-price">{{ row.best_price or "&mdash;" }}</div>
+      </div>
+      <div>
+        <div class="log-row-label">Tier 1</div>
+        <div class="log-row-price">{{ row.tier1_count }}</div>
+      </div>
+      <div>
+        <div class="log-row-label">Last checked</div>
+        <div class="log-row-meta">{{ row.last_checked_str }}</div>
+      </div>
+    </div>
+    <div class="log-row-actions" onclick="event.preventDefault()">
+      <a class="btn btn-sm btn-glass" href="/logs/{{ row.query_key }}/edit">Edit</a>
+      <form method="post" action="/logs/{{ row.query_key }}/delete"
+            onsubmit="return confirm('Remove this flight from your watchlist?')">
+        <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+      </form>
+    </div>
+  </a>
+  {% endfor %}
+  {% endif %}
+
+</div>
+{% endblock %}

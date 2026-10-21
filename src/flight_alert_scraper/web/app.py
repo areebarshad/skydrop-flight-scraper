@@ -11,20 +11,28 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import ValidationError
 
 from flight_alert_scraper.config import Settings
 from flight_alert_scraper.db.engine import get_session
 from flight_alert_scraper.db.repo import (
+    deactivate_watched_query,
     get_alert_state,
     get_latest_run,
     get_price_history,
     get_recent_alerts,
     get_recent_runs,
     get_snapshots_for_run,
-    list_watched_queries,
+    get_user_setting,
+    set_user_setting,
 )
 from flight_alert_scraper.db.tables import WatchedQuery
 from flight_alert_scraper.web import jobs as _jobs
+from flight_alert_scraper.web.forms import (
+    query_key_for_row,
+    row_from_form,
+    validate_email,
+)
 from flight_alert_scraper.web.presenters import (
     build_price_svg,
     fmt_relative_time,
@@ -43,9 +51,44 @@ def create_app(settings: Settings) -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(_HERE / "static")), name="static")
     templates = Jinja2Templates(directory=str(_HERE / "templates"))
 
-    def _all_routes() -> list[WatchedQuery]:
-        with get_session(settings.db_path) as s:
-            return list_watched_queries(s)
+    def _log_rows() -> list[dict[str, Any]]:
+        raw_rows = load_watchlist_raw(settings.watchlist_path)
+        rows: list[dict[str, Any]] = []
+        with get_session(settings.db_path) as session:
+            for raw in raw_rows:
+                try:
+                    key = query_key_for_row(raw)
+                except Exception:
+                    continue
+                wq = session.get(WatchedQuery, key)
+                latest_run = get_latest_run(session, key) if wq else None
+                snapshots = (
+                    get_snapshots_for_run(session, latest_run.id)
+                    if latest_run and latest_run.id
+                    else []
+                )
+                cards = [snapshot_to_card(s) for s in snapshots]
+                best_price = min((c["price_raw"] for c in cards), default=None)
+                tier1_count = sum(1 for c in cards if c["tier"] == 1)
+                rows.append(
+                    {
+                        "query_key": key,
+                        "origin": raw["origin"],
+                        "destination": raw["destination"],
+                        "depart_date": raw.get("depart_date", ""),
+                        "return_date": raw.get("return_date"),
+                        "cabin": raw.get("cabin", "economy"),
+                        "adults": raw.get("adults", 1),
+                        "best_price": (
+                            f"${best_price:,.0f}" if best_price is not None else None
+                        ),
+                        "tier1_count": tier1_count,
+                        "last_checked_str": fmt_relative_time(
+                            wq.last_checked_at if wq else None
+                        ),
+                    }
+                )
+        return rows
 
     @app.get("/healthz")
     async def healthz() -> JSONResponse:
@@ -53,18 +96,159 @@ def create_app(settings: Settings) -> FastAPI:
 
     @app.get("/", response_class=RedirectResponse)
     async def root() -> RedirectResponse:
-        routes = _all_routes()
-        if not routes:
-            raise HTTPException(404, "No watched routes found")
-        return RedirectResponse(f"/routes/{routes[0].query_key}", status_code=302)
+        return RedirectResponse("/logs", status_code=302)
 
-    @app.get("/routes/{query_key}", response_class=HTMLResponse)
-    async def dashboard(query_key: str, request: Request) -> HTMLResponse:
+    # ── Logs tab ──────────────────────────────────────────────
+
+    @app.get("/logs", response_class=HTMLResponse)
+    async def logs_list(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "logs.html",
+            {"rows": _log_rows(), "active_tab": "logs"},
+        )
+
+    @app.get("/logs/new", response_class=HTMLResponse)
+    async def log_new_get(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "log_form.html",
+            {
+                "mode": "add",
+                "action": "/logs/new",
+                "row": None,
+                "errors": [],
+                "active_tab": "logs",
+            },
+        )
+
+    @app.post("/logs/new", response_class=HTMLResponse)
+    async def log_new_post(request: Request) -> HTMLResponse | RedirectResponse:
+        form = await request.form()
+        try:
+            row = row_from_form(form)
+        except (ValidationError, ValueError, InvalidOperation) as exc:
+            return templates.TemplateResponse(
+                request,
+                "log_form.html",
+                {
+                    "mode": "add",
+                    "action": "/logs/new",
+                    "row": None,
+                    "errors": [str(exc)],
+                    "active_tab": "logs",
+                },
+            )
+        existing = load_watchlist_raw(settings.watchlist_path)
+        existing.append(row)
+        save_watchlist(settings.watchlist_path, existing)
+        return RedirectResponse("/logs", status_code=303)
+
+    @app.get("/logs/{query_key}/edit", response_class=HTMLResponse)
+    async def log_edit_get(query_key: str, request: Request) -> HTMLResponse:
+        rows = load_watchlist_raw(settings.watchlist_path)
+        matched: dict[str, Any] | None = None
+        for r in rows:
+            try:
+                if query_key_for_row(r) == query_key:
+                    matched = r
+                    break
+            except Exception:
+                continue
+        if matched is None:
+            raise HTTPException(404, f"Flight {query_key!r} not found in watchlist")
+        return templates.TemplateResponse(
+            request,
+            "log_form.html",
+            {
+                "mode": "edit",
+                "action": f"/logs/{query_key}/edit",
+                "row": matched,
+                "errors": [],
+                "active_tab": "logs",
+            },
+        )
+
+    @app.post("/logs/{query_key}/edit", response_class=HTMLResponse)
+    async def log_edit_post(query_key: str, request: Request) -> HTMLResponse | RedirectResponse:
+        form = await request.form()
+        try:
+            new_row = row_from_form(form)
+        except (ValidationError, ValueError, InvalidOperation) as exc:
+            rows = load_watchlist_raw(settings.watchlist_path)
+            old_row = next(
+                (r for r in rows if query_key_for_row(r) == query_key), None
+            )
+            return templates.TemplateResponse(
+                request,
+                "log_form.html",
+                {
+                    "mode": "edit",
+                    "action": f"/logs/{query_key}/edit",
+                    "row": old_row,
+                    "errors": [str(exc)],
+                    "active_tab": "logs",
+                },
+            )
+        new_key = query_key_for_row(new_row)
+        rows = load_watchlist_raw(settings.watchlist_path)
+        updated = False
+        warnings: list[str] = []
+        new_rows: list[dict[str, Any]] = []
+        for r in rows:
+            try:
+                rk = query_key_for_row(r)
+            except Exception:
+                new_rows.append(r)
+                continue
+            if rk == query_key:
+                if new_key != query_key:
+                    warnings.append(
+                        f"Changing origin/destination/dates/cabin/pax creates a new "
+                        f"key ({query_key[:8]}→{new_key[:8]}). Old history is orphaned."
+                    )
+                new_rows.append(new_row)
+                updated = True
+            else:
+                new_rows.append(r)
+        if not updated:
+            new_rows.append(new_row)
+        save_watchlist(settings.watchlist_path, new_rows)
+        if warnings:
+            return templates.TemplateResponse(
+                request,
+                "log_form.html",
+                {
+                    "mode": "edit",
+                    "action": f"/logs/{new_key}/edit",
+                    "row": new_row,
+                    "errors": warnings,
+                    "active_tab": "logs",
+                },
+            )
+        return RedirectResponse("/logs", status_code=303)
+
+    @app.post("/logs/{query_key}/delete", response_class=HTMLResponse)
+    async def log_delete(query_key: str) -> RedirectResponse:
+        rows = load_watchlist_raw(settings.watchlist_path)
+        new_rows = []
+        for r in rows:
+            try:
+                if query_key_for_row(r) != query_key:
+                    new_rows.append(r)
+            except Exception:
+                new_rows.append(r)
+        save_watchlist(settings.watchlist_path, new_rows)
+        with get_session(settings.db_path) as session:
+            deactivate_watched_query(session, query_key)
+        return RedirectResponse("/logs", status_code=303)
+
+    @app.get("/logs/{query_key}", response_class=HTMLResponse)
+    async def log_detail(query_key: str, request: Request) -> HTMLResponse:
         with get_session(settings.db_path) as session:
             wq = session.get(WatchedQuery, query_key)
             if wq is None:
                 raise HTTPException(404, f"Route {query_key!r} not found")
-            all_routes = list_watched_queries(session)
             latest_run = get_latest_run(session, query_key)
             alert_state = get_alert_state(session, query_key)
             snapshots = (
@@ -80,12 +264,11 @@ def create_app(settings: Settings) -> FastAPI:
         budget = Decimal(str(constraints.get("max_price_usd", "9999")))
         max_dur_min: int | None = constraints.get("max_duration_minutes")
 
-        tier1_cards = [snapshot_to_card(s) for s in snapshots if s.tier == 1]
-        tier2_cards = [snapshot_to_card(s) for s in snapshots if s.tier == 2]
-        tier3_cards = [snapshot_to_card(s) for s in snapshots if s.tier == 3]
-        hero: dict[str, Any] | None = next(
-            iter(tier1_cards or tier2_cards or tier3_cards), None
-        )
+        all_cards = [snapshot_to_card(s) for s in snapshots]
+        ranked_cards = sorted(all_cards, key=lambda c: c["price_raw"])
+        hero: dict[str, Any] | None = ranked_cards[0] if ranked_cards else None
+        tier1_count = sum(1 for c in all_cards if c["tier"] == 1)
+
         price_svg = (
             build_price_svg(price_history, budget) if len(price_history) >= 2 else None
         )
@@ -98,17 +281,15 @@ def create_app(settings: Settings) -> FastAPI:
 
         return templates.TemplateResponse(
             request,
-            "dashboard.html",
+            "log_detail.html",
             {
                 "query_key": query_key,
                 "wq": wq,
-                "all_routes": all_routes,
                 "latest_run": latest_run,
                 "alert_state": alert_state,
                 "hero": hero,
-                "tier1_cards": tier1_cards,
-                "tier2_cards": tier2_cards,
-                "tier3_cards": tier3_cards,
+                "ranked_cards": ranked_cards,
+                "tier1_count": tier1_count,
                 "price_svg": price_svg,
                 "price_history_count": len(price_history),
                 "recent_runs": recent_runs,
@@ -116,10 +297,11 @@ def create_app(settings: Settings) -> FastAPI:
                 "constraints": constraints,
                 "constraint_line": constraint_line,
                 "last_checked_str": fmt_relative_time(wq.last_checked_at),
+                "active_tab": "logs",
             },
         )
 
-    @app.post("/routes/{query_key}/check", response_class=HTMLResponse)
+    @app.post("/logs/{query_key}/check", response_class=HTMLResponse)
     async def start_check(query_key: str, request: Request) -> HTMLResponse:
         with get_session(settings.db_path) as session:
             wq = session.get(WatchedQuery, query_key)
@@ -137,28 +319,7 @@ def create_app(settings: Settings) -> FastAPI:
             },
         )
 
-    @app.get("/jobs/{job_id}", response_class=HTMLResponse)
-    async def poll_job(job_id: str, request: Request) -> HTMLResponse:
-        job = _jobs.get_job(job_id)
-        if job is None:
-            return HTMLResponse('<span class="job-msg">Job not found</span>')
-        if job["state"] in ("done", "error"):
-            resp = HTMLResponse(
-                f'<span class="job-msg job-{job["state"]}">{job["message"]}</span>'
-            )
-            resp.headers["HX-Redirect"] = f"/routes/{job['query_key']}"
-            return resp
-        return templates.TemplateResponse(
-            request,
-            "partials/job_status.html",
-            {
-                "job_id": job_id,
-                "job": job,
-                "query_key": job["query_key"],
-            },
-        )
-
-    @app.get("/routes/{query_key}/email-preview", response_class=HTMLResponse)
+    @app.get("/logs/{query_key}/email-preview", response_class=HTMLResponse)
     async def email_preview(query_key: str, request: Request) -> HTMLResponse:
         with get_session(settings.db_path) as session:
             wq = session.get(WatchedQuery, query_key)
@@ -235,135 +396,80 @@ def create_app(settings: Settings) -> FastAPI:
                 "query_key": query_key,
                 "subject": subject,
                 "email_body": html_body,
-                "all_routes": _all_routes(),
+                "active_tab": "logs",
             },
         )
 
-    @app.get("/settings", response_class=HTMLResponse)
-    async def settings_get(request: Request) -> HTMLResponse:
-        queries = load_watchlist_raw(settings.watchlist_path)
+    # ── Alerts tab ────────────────────────────────────────────
+
+    @app.get("/alerts", response_class=HTMLResponse)
+    async def alerts_get(request: Request) -> HTMLResponse:
+        with get_session(settings.db_path) as session:
+            current_email = get_user_setting(session, "alert_recipient")
+        smtp_configured = bool(settings.smtp_user and settings.smtp_app_password)
         return templates.TemplateResponse(
             request,
-            "settings.html",
+            "alerts.html",
             {
-                "queries": queries,
-                "errors": [],
+                "current_email": current_email,
+                "smtp_configured": smtp_configured,
                 "success": False,
-                "all_routes": _all_routes(),
-                "query_key": None,
+                "error": None,
+                "active_tab": "alerts",
             },
         )
 
-    @app.post("/settings", response_class=HTMLResponse)
-    async def settings_post(request: Request) -> HTMLResponse:
-        import datetime as dt_mod
-
-        from pydantic import ValidationError
-
-        from flight_alert_scraper.models.query import (
-            CabinClass,
-            Constraints,
-            SearchQuery,
-        )
-
+    @app.post("/alerts", response_class=HTMLResponse)
+    async def alerts_post(request: Request) -> HTMLResponse:
         form = await request.form()
-        num_raw = form.get("num_queries", "0")
-        try:
-            num = int(str(num_raw))
-        except ValueError:
-            num = 0
-
-        errors: list[str] = []
-        new_queries: list[dict[str, Any]] = []
-
-        for i in range(num):
-
-            def _f(key: str, idx: int = i) -> str:
-                v = form.get(f"{key}_{idx}")
-                return str(v).strip() if v else ""
-
-            try:
-                max_price_raw = _f("max_price_usd")
-                max_dur_raw = _f("max_duration_minutes")
-                max_stops_raw = _f("max_stops")
-                constraints_obj = Constraints(
-                    max_price_usd=(
-                        Decimal(max_price_raw) if max_price_raw else Decimal("9999")
-                    ),
-                    max_duration_minutes=int(max_dur_raw) if max_dur_raw else None,
-                    max_stops=int(max_stops_raw) if max_stops_raw else None,
-                    value_deal_discount=Decimal(_f("value_deal_discount") or "0.20"),
-                    value_deal_duration_buffer_minutes=int(
-                        _f("value_deal_duration_buffer_minutes") or "180"
-                    ),
-                    time_saver_price_overage=Decimal(
-                        _f("time_saver_price_overage") or "0.10"
-                    ),
-                    hourly_time_penalty_usd=Decimal(
-                        _f("hourly_time_penalty_usd") or "20.00"
-                    ),
-                )
-                ret_raw = _f("return_date")
-                query = SearchQuery(
-                    origin=_f("origin"),
-                    destination=_f("destination"),
-                    depart_date=dt_mod.date.fromisoformat(_f("depart_date")),
-                    return_date=(
-                        dt_mod.date.fromisoformat(ret_raw) if ret_raw else None
-                    ),
-                    cabin=CabinClass(_f("cabin") or "economy"),
-                    adults=int(_f("adults") or "1"),
-                    constraints=constraints_obj,
-                )
-                old_key_raw = _f("old_query_key")
-                row: dict[str, Any] = {
-                    "origin": query.origin,
-                    "destination": query.destination,
-                    "depart_date": query.depart_date.isoformat(),
-                    "cabin": str(query.cabin),
-                    "adults": query.adults,
-                    "constraints": {
-                        "max_price_usd": str(constraints_obj.max_price_usd),
-                        "max_duration_minutes": constraints_obj.max_duration_minutes,
-                        "max_stops": constraints_obj.max_stops,
-                        "value_deal_discount": str(constraints_obj.value_deal_discount),
-                        "value_deal_duration_buffer_minutes": (
-                            constraints_obj.value_deal_duration_buffer_minutes
-                        ),
-                        "time_saver_price_overage": str(
-                            constraints_obj.time_saver_price_overage
-                        ),
-                        "hourly_time_penalty_usd": str(
-                            constraints_obj.hourly_time_penalty_usd
-                        ),
-                    },
-                }
-                if ret_raw and query.return_date:
-                    row["return_date"] = query.return_date.isoformat()
-                if old_key_raw and old_key_raw != query.query_key:
-                    errors.append(
-                        f"Row {i + 1}: changing origin/destination/dates/cabin/pax "
-                        f"creates a new route key "
-                        f"({old_key_raw[:8]}→{query.query_key[:8]}). "
-                        f"Old history will be orphaned."
-                    )
-                new_queries.append(row)
-            except (ValidationError, ValueError, InvalidOperation) as exc:
-                errors.append(f"Row {i + 1}: {exc}")
-
-        if not errors:
-            save_watchlist(settings.watchlist_path, new_queries)
-
-        queries = load_watchlist_raw(settings.watchlist_path)
+        address = str(form.get("alert_recipient", "")).strip()
+        smtp_configured = bool(settings.smtp_user and settings.smtp_app_password)
+        if not validate_email(address):
+            return templates.TemplateResponse(
+                request,
+                "alerts.html",
+                {
+                    "current_email": address,
+                    "smtp_configured": smtp_configured,
+                    "success": False,
+                    "error": "Enter a valid email address.",
+                    "active_tab": "alerts",
+                },
+            )
+        with get_session(settings.db_path) as session:
+            set_user_setting(session, "alert_recipient", address)
         return templates.TemplateResponse(
             request,
-            "settings.html",
+            "alerts.html",
             {
-                "queries": queries,
-                "errors": errors,
-                "success": not errors,
-                "all_routes": _all_routes(),
-                "query_key": None,
+                "current_email": address,
+                "smtp_configured": smtp_configured,
+                "success": True,
+                "error": None,
+                "active_tab": "alerts",
+            },
+        )
+
+    # ── Jobs ──────────────────────────────────────────────────
+
+    @app.get("/jobs/{job_id}", response_class=HTMLResponse)
+    async def poll_job(job_id: str, request: Request) -> HTMLResponse:
+        job = _jobs.get_job(job_id)
+        if job is None:
+            return HTMLResponse('<span class="job-msg">Job not found</span>')
+        if job["state"] in ("done", "error"):
+            resp = HTMLResponse(
+                f'<span class="job-msg job-{job["state"]}">{job["message"]}</span>'
+            )
+            resp.headers["HX-Redirect"] = f"/logs/{job['query_key']}"
+            return resp
+        return templates.TemplateResponse(
+            request,
+            "partials/job_status.html",
+            {
+                "job_id": job_id,
+                "job": job,
+                "query_key": job["query_key"],
             },
         )
 

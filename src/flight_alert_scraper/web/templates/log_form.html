@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == "add" %}Add flight{% else %}Edit flight{% endif %} &mdash; skydrop{% endblock %}
+{% block content %}
+<div class="settings-page">
+
+  <div class="settings-hero">
+    <h1>{% if mode == "add" %}Add a flight{% else %}Edit flight{% endif %}</h1>
+    <p>{% if mode == "add" %}Enter the route details to start tracking fares.{% else %}Update the route details below.{% endif %}</p>
+  </div>
+
+  {% for err in errors %}
+  <div class="alert alert-error">&#x26A0; {{ err }}</div>
+  {% endfor %}
+
+  <form method="post" action="{{ action }}" class="settings-form">
+    <fieldset class="glass-card query-row">
+      <legend>Route</legend>
+      <div class="field-row">
+        <label>Origin
+          <input type="text" name="origin" value="{{ row.origin if row else '' }}"
+                 maxlength="3" required pattern="[A-Z]{3}" placeholder="IAD">
+        </label>
+        <label>Destination
+          <input type="text" name="destination" value="{{ row.destination if row else '' }}"
+                 maxlength="3" required pattern="[A-Z]{3}" placeholder="JFK">
+        </label>
+        <label>Depart
+          <input type="date" name="depart_date" value="{{ row.depart_date if row else '' }}" required>
+        </label>
+        <label>Return
+          <input type="date" name="return_date" value="{{ row.return_date if row else '' }}">
+        </label>
+        <label>Cabin
+          <select name="cabin">
+            {% for opt in ["economy", "premium_economy", "business", "first"] %}
+            <option value="{{ opt }}"
+              {% if row and row.cabin == opt %}selected{% elif not row and opt == "economy" %}selected{% endif %}>
+              {{ opt }}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Adults
+          <input type="number" name="adults" value="{{ row.adults if row else 1 }}" min="1" max="9" required>
+        </label>
+      </div>
+
+      <details class="constraints-details">
+        <summary>&#x25B8; Advanced constraints</summary>
+        <div class="field-row">
+          <label>Max price ($)
+            <input type="text" name="max_price_usd"
+                   value="{{ row.constraints.max_price_usd if row else '1200' }}" placeholder="1200">
+          </label>
+          <label>Max duration (min)
+            <input type="number" name="max_duration_minutes"
+                   value="{{ row.constraints.max_duration_minutes if row else '' }}" placeholder="none">
+          </label>
+          <label>Max stops
+            <input type="number" name="max_stops"
+                   value="{{ row.constraints.max_stops if row else '' }}" min="0" placeholder="any">
+          </label>
+          <label>Value deal discount
+            <input type="text" name="value_deal_discount"
+                   value="{{ row.constraints.value_deal_discount if row else '0.20' }}" placeholder="0.20">
+          </label>
+          <label>Value deal buf (min)
+            <input type="number" name="value_deal_duration_buffer_minutes"
+                   value="{{ row.constraints.value_deal_duration_buffer_minutes if row else 180 }}" placeholder="180">
+          </label>
+          <label>Time saver overage
+            <input type="text" name="time_saver_price_overage"
+                   value="{{ row.constraints.time_saver_price_overage if row else '0.10' }}" placeholder="0.10">
+          </label>
+          <label>$/hr penalty
+            <input type="text" name="hourly_time_penalty_usd"
+                   value="{{ row.constraints.hourly_time_penalty_usd if row else '20.00' }}" placeholder="20.00">
+          </label>
+        </div>
+      </details>
+    </fieldset>
+
+    <div class="settings-actions">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <a class="btn btn-glass" href="/logs">Cancel</a>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

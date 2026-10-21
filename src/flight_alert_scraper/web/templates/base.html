@@ -26,19 +26,12 @@
     </a>
     <div class="nav-divider"></div>
     <div class="nav-routes">
-      {% for r in all_routes %}
-      <a class="nav-route {% if r.query_key == query_key %}active{% endif %}"
-         href="/routes/{{ r.query_key }}">
-        {{ r.origin }}&thinsp;&rarr;&thinsp;{{ r.destination }}
-      </a>
-      {% endfor %}
+      <a class="nav-route {% if active_tab == 'logs' %}active{% endif %}" href="/logs">Logs</a>
+      <a class="nav-route {% if active_tab == 'alerts' %}active{% endif %}" href="/alerts">Alerts</a>
     </div>
     <div class="scraper-status">
       <div class="pulse-dot"></div>
       <span>Live</span>
-    </div>
-    <div class="nav-actions">
-      <a class="btn btn-glass btn-sm" href="/settings">Settings</a>
     </div>
   </nav>
 </div>
@@ -49,6 +42,7 @@
 
 <footer class="footer">
   skydrop &mdash; flight price monitor
+  <div class="footer-author">Author: Areeb Arshad &nbsp;&middot;&nbsp; Data Science, Statistics, and Mathematics @ Virginia Tech</div>
 </footer>
 </body>
 </html>

@@ -12,6 +12,7 @@ from flight_alert_scraper.db.tables import (
     AlertState,
     FlightSnapshot,
     ScrapeRun,
+    UserSetting,
     WatchedQuery,
 )
 from flight_alert_scraper.models.query import SearchQuery
@@ -224,3 +225,27 @@ def get_recent_alerts(
         .limit(limit)
     )
     return list(session.exec(stmt).all())
+
+
+def get_user_setting(session: Session, key: str) -> str | None:
+    row = session.get(UserSetting, key)
+    return row.value if row else None
+
+
+def set_user_setting(session: Session, key: str, value: str) -> None:
+    existing = session.get(UserSetting, key)
+    if existing is not None:
+        existing.value = value
+        existing.updated_at = datetime.now(tz=UTC)
+        session.add(existing)
+    else:
+        session.add(UserSetting(key=key, value=value, updated_at=datetime.now(tz=UTC)))
+    session.commit()
+
+
+def deactivate_watched_query(session: Session, query_key: str) -> None:
+    wq = session.get(WatchedQuery, query_key)
+    if wq:
+        wq.active = False
+        session.add(wq)
+        session.commit()

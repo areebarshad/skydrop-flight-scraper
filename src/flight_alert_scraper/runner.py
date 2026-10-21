@@ -78,8 +78,11 @@ def run_query(
         ).hexdigest()[:32]
 
         from flight_alert_scraper.config import get_settings
+        from flight_alert_scraper.db.repo import get_user_setting
         settings = get_settings()
-        recipient = settings.alert_recipient
+        recipient = (
+            get_user_setting(session, "alert_recipient") or settings.alert_recipient
+        )
 
         if dry_run:
             _write_preview(subject, html_body, text_body)

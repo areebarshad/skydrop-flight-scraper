@@ -85,3 +85,11 @@ class AlertLog(SQLModel, table=True):
     sent_at: datetime = Field(index=True)
     delivery_ok: bool
     delivery_error: str | None = None
+
+
+class UserSetting(SQLModel, table=True):
+    __tablename__ = "user_setting"
+
+    key: str = Field(primary_key=True)
+    value: str
+    updated_at: datetime
