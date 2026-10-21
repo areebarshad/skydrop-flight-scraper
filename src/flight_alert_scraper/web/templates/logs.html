@@ -34,7 +34,7 @@
     <div class="log-row-stats">
       <div>
         <div class="log-row-label">Best fare</div>
-        <div class="log-row-price">{{ row.best_price or "&mdash;" }}</div>
+        <div class="log-row-price">{{ row.best_price or "—" }}</div>
       </div>
       <div>
         <div class="log-row-label">Tier 1</div>
@@ -75,7 +75,7 @@
   <!-- Settings -->
   <div id="settings" class="settings-section glass-card">
     <h2 class="settings-title">Settings</h2>
-    <p class="settings-note">Saved to <code>.env</code> (excluded from version control).</p>
+    <p class="settings-note">Stay ahead of price drops — get email alerts delivered every 6 hours, automatically.</p>
 
     {% if settings_error %}
     <div class="settings-error">{{ settings_error }}</div>
