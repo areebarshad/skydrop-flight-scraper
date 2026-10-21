@@ -194,7 +194,16 @@ def get_cheapest_carrier_by_run(
     result: dict[int, str] = {}
     for snap in session.exec(stmt).all():
         if snap.run_id not in result:
-            result[snap.run_id] = snap.carriers
+            try:
+                opt = json.loads(snap.option_json)
+                seen: list[str] = []
+                for leg in opt.get("legs", []):
+                    name = leg.get("carrier") or leg.get("carrier_code", "")
+                    if name and name not in seen:
+                        seen.append(name)
+                result[snap.run_id] = " · ".join(seen) if seen else snap.carriers
+            except Exception:
+                result[snap.run_id] = snap.carriers
     return result
 
 

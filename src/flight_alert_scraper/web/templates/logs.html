@@ -19,14 +19,19 @@
   </div>
   {% else %}
   {% for row in rows %}
-  <a class="glass-card log-row" href="/logs/{{ row.query_key }}">
+  <div class="glass-card log-row"
+       tabindex="0"
+       role="link"
+       data-href="/logs/{{ row.query_key }}"
+       onclick="window.location.href=this.dataset.href"
+       onkeydown="if(event.key==='Enter')window.location.href=this.dataset.href">
     <div class="log-row-route">
       <div class="route-badge">
         <span class="route-iata">{{ row.origin }}</span>
         <span class="route-arrow">&#x2192;</span>
         <span class="route-iata">{{ row.destination }}</span>
       </div>
-      <div class="log-row-meta">
+      <div class="log-row-constraints">
         {{ row.depart_date }}{% if row.return_date %} &ndash; {{ row.return_date }}{% endif %}
         &middot; {{ row.cabin }} &middot; {{ row.adults }} pax
       </div>
@@ -45,7 +50,7 @@
         <div class="log-row-meta">{{ row.last_checked_str }}</div>
       </div>
     </div>
-    <div class="log-row-actions" onclick="event.preventDefault()">
+    <div class="log-row-actions" onclick="event.stopPropagation()">
       <a class="btn-icon btn-glass"
          href="/logs/{{ row.query_key }}/edit"
          aria-label="Edit flight"
@@ -68,7 +73,7 @@
         </button>
       </form>
     </div>
-  </a>
+  </div>
   {% endfor %}
   {% endif %}
 

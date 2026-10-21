@@ -396,10 +396,6 @@ def create_app(settings: Settings) -> FastAPI:
             constraint_line_parts.append(f"limit {h}h" + (f" {m}m" if m else ""))
         constraint_line = " · ".join(constraint_line_parts)
 
-        first_run_error: str | None = None
-        if recent_runs and recent_runs[0].error_message:
-            first_run_error = recent_runs[0].error_message
-
         return templates.TemplateResponse(
             request,
             "log_detail.html",
@@ -421,7 +417,6 @@ def create_app(settings: Settings) -> FastAPI:
                 "active_tab": "logs",
                 "job_id": job_id,
                 "job": job,
-                "first_run_error": first_run_error,
                 "cheapest_by_run": cheapest_by_run,
             },
         )

@@ -352,6 +352,10 @@ a:hover { text-decoration: underline; }
 .htmx-indicator { display: none; color: var(--text-muted); }
 .htmx-request .htmx-indicator { display: inline; }
 
+/* ── Spinner ── */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.75s linear infinite; display: inline-block; vertical-align: middle; }
+
 #job-status { min-height: 20px; }
 
 .job-msg {
@@ -886,29 +890,34 @@ a:hover { text-decoration: underline; }
   display: grid;
   grid-template-columns: 1fr auto auto;
   align-items: center;
-  gap: 20px;
-  padding: 18px 24px;
-  margin-bottom: 12px;
+  gap: 24px;
+  padding: 24px 32px;
+  margin-bottom: 14px;
   cursor: pointer;
-  text-decoration: none;
   color: inherit;
+  border-left: 3px solid transparent;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 .log-row:hover {
   transform: translateY(-2px);
   background: linear-gradient(135deg, rgba(255,255,255,0.88) 0%, rgba(255,255,255,0.70) 100%);
-  border-color: rgba(0,102,255,0.35);
+  border-left-color: var(--blue-primary);
   box-shadow: 0 16px 40px -8px rgba(0,102,255,0.14), inset 0 1px 0 0 rgba(255,255,255,0.95);
-  text-decoration: none;
+}
+.log-row:focus-visible {
+  outline: 2px solid var(--blue-primary);
+  outline-offset: 2px;
 }
 @media (max-width: 640px) {
-  .log-row { grid-template-columns: 1fr; }
+  .log-row { grid-template-columns: 1fr; padding: 18px 20px; }
 }
+
+.log-row .route-iata { font-size: 38px; }
 
 .log-row-route {}
 .log-row-stats {
   display: flex;
-  gap: 28px;
+  gap: 32px;
   align-items: center;
 }
 .log-row-actions {
@@ -921,15 +930,23 @@ a:hover { text-decoration: underline; }
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   color: var(--text-muted);
-  margin-bottom: 2px;
+  margin-bottom: 3px;
+}
+.log-row-constraints {
+  font-size: 13px;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--text-secondary);
+  margin-top: 7px;
+  letter-spacing: 0.01em;
 }
 .log-row-meta { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 .log-row-price {
   font-family: 'JetBrains Mono', monospace;
   font-variant-numeric: tabular-nums;
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--text-primary);
 }

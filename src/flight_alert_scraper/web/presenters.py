@@ -35,6 +35,19 @@ def fmt_relative_time(dt: datetime | None) -> str:
     return f"{seconds // 86400}d ago"
 
 
+def _full_carrier_names(option_json: str, fallback: str) -> str:
+    try:
+        opt = json.loads(option_json)
+        seen: list[str] = []
+        for leg in opt.get("legs", []):
+            name = leg.get("carrier") or leg.get("carrier_code", "")
+            if name and name not in seen:
+                seen.append(name)
+        return " · ".join(seen) if seen else fallback
+    except Exception:
+        return fallback
+
+
 def snapshot_to_card(snap: FlightSnapshot) -> dict[str, Any]:
     labels: list[str] = json.loads(snap.labels)
     booking_link = "#"
@@ -49,7 +62,7 @@ def snapshot_to_card(snap: FlightSnapshot) -> dict[str, Any]:
         "price_raw": float(snap.price_usd),
         "duration": fmt_duration(snap.total_duration_minutes),
         "stops": snap.stops,
-        "carriers": snap.carriers,
+        "carriers": _full_carrier_names(snap.option_json, snap.carriers),
         "tier": snap.tier,
         "labels": labels,
         "effective_cost": fmt_price(snap.effective_cost_usd),

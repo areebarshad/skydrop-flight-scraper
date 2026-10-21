@@ -8,12 +8,6 @@
     <a class="btn btn-sm btn-glass" href="/logs">&#x2190; All flights</a>
   </div>
 
-  {% if first_run_error %}
-  <div class="run-error-banner">
-    <strong>Last run error:</strong> {{ first_run_error }}
-  </div>
-  {% endif %}
-
   <!-- Page Header -->
   <div class="page-header">
     <div>
@@ -262,7 +256,7 @@
               onclick="window.location='/logs/{{ query_key }}/runs/{{ run.id }}'"
               style="cursor:pointer">
             <td>{{ run.started_at.strftime("%Y-%m-%d %H:%M") }}</td>
-            <td>{{ cheapest_by_run.get(run.id, "&mdash;") }}</td>
+            <td>{{ cheapest_by_run.get(run.id) or "—" }}</td>
             <td>{{ run.tier1_count }}</td>
             <td>{{ run.tier2_count }}</td>
             <td>{{ run.candidates_found }}</td>
@@ -283,7 +277,7 @@
   <div class="footer-strip">
     <span>candidates: {{ latest_run.candidates_found }}</span>
     <span>filtered: {{ latest_run.candidates_found - latest_run.tier1_count - latest_run.tier2_count }}</span>
-    <span>provider: {{ latest_run.provider or "&mdash;" }}</span>
+    <span>provider: {{ latest_run.provider or "—" }}</span>
     {% if alert_state and alert_state.last_suppressed_reason %}
     <span class="suppressed">no email: {{ alert_state.last_suppressed_reason }}</span>
     {% endif %}
