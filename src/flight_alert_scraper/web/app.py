@@ -19,6 +19,7 @@ from flight_alert_scraper.db.repo import (
     deactivate_watched_query,
     get_alert_state,
     get_cheapest_carrier_by_run,
+    get_cheapest_price_by_run,
     get_latest_run,
     get_price_history,
     get_recent_alerts,
@@ -36,7 +37,9 @@ from flight_alert_scraper.web.forms import (
     validate_email,
 )
 from flight_alert_scraper.web.presenters import (
+    build_price_distribution_svg,
     build_price_svg,
+    fmt_price,
     fmt_relative_time,
     snapshot_to_card,
 )
@@ -348,7 +351,11 @@ def create_app(settings: Settings) -> FastAPI:
 
     @app.get("/logs/{query_key}", response_class=HTMLResponse)
     async def log_detail(
-        query_key: str, request: Request, ran: str | None = None
+        query_key: str,
+        request: Request,
+        ran: str | None = None,
+        dist_mode: str = "overall",
+        sort: str = "price",
     ) -> HTMLResponse:
         with get_session(settings.db_path) as session:
             wq: WatchedQuery | None = session.get(WatchedQuery, query_key)
@@ -366,10 +373,15 @@ def create_app(settings: Settings) -> FastAPI:
                 else []
             )
             price_history = get_price_history(session, query_key)
-            recent_runs = get_recent_runs(session, query_key, limit=20)
+            all_recent_runs = get_recent_runs(session, query_key, limit=20)
+            recent_runs = [r for r in all_recent_runs if r.finished_at is not None]
             recent_alerts = get_recent_alerts(session, query_key)
             run_ids = [r.id for r in recent_runs if r.id is not None]
             cheapest_by_run = get_cheapest_carrier_by_run(session, run_ids)
+            cheapest_price_by_run_raw = get_cheapest_price_by_run(session, run_ids)
+            cheapest_price_by_run = {
+                rid: fmt_price(p) for rid, p in cheapest_price_by_run_raw.items()
+            }
 
         job_id: str | None = None
         job: dict | None = None
@@ -381,13 +393,25 @@ def create_app(settings: Settings) -> FastAPI:
         budget = Decimal(str(constraints.get("max_price_usd", "9999")))
         max_dur_min: int | None = constraints.get("max_duration_minutes")
 
+        _sort_keys: dict[str, Any] = {
+            "price": lambda c: c["price_raw"],
+            "duration": lambda c: c["duration_raw"],
+            "stops": lambda c: (c["stops"], c["price_raw"]),
+            "effective": lambda c: c["effective_raw"],
+            "tier": lambda c: (c["tier"], c["price_raw"]),
+        }
+        _sort_fn = _sort_keys.get(sort, _sort_keys["price"])
+
         all_cards = [snapshot_to_card(s) for s in snapshots]
-        ranked_cards = sorted(all_cards, key=lambda c: c["price_raw"])
-        hero: dict[str, Any] | None = ranked_cards[0] if ranked_cards else None
+        ranked_cards = sorted(all_cards, key=_sort_fn)
+        hero: dict[str, Any] | None = sorted(all_cards, key=lambda c: c["price_raw"])[0] if all_cards else None
         tier1_count = sum(1 for c in all_cards if c["tier"] == 1)
 
+        dist_mode_safe = dist_mode if dist_mode in ("overall", "tier1") else "overall"
         price_svg = (
-            build_price_svg(price_history, budget) if len(price_history) >= 1 else None
+            build_price_distribution_svg(price_history, budget, mode=dist_mode_safe)
+            if len(price_history) >= 1
+            else None
         )
 
         constraint_line_parts = [f"budget ${budget:,.0f}"]
@@ -418,6 +442,10 @@ def create_app(settings: Settings) -> FastAPI:
                 "job_id": job_id,
                 "job": job,
                 "cheapest_by_run": cheapest_by_run,
+                "cheapest_price_by_run": cheapest_price_by_run,
+                "current_sort": sort,
+                "dist_mode": dist_mode_safe,
+                "ran": ran,
             },
         )
 

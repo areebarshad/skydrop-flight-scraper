@@ -176,17 +176,24 @@
   </section>
   {% endif %}
 
-  <!-- Price History -->
+  <!-- Price Distribution -->
   <section class="section">
     <div class="section-header">
-      <span class="section-title">Price history</span>
+      <span class="section-title">Price distribution</span>
+      <div class="filter-pills filter-pills-sm" id="dist-filter-pills">
+        <a class="filter-pill{% if dist_mode == 'overall' %} active{% endif %}"
+           href="?dist_mode=overall&sort={{ current_sort }}{% if ran %}&ran={{ ran }}{% endif %}">All prices</a>
+        <a class="filter-pill{% if dist_mode == 'tier1' %} active{% endif %}"
+           href="?dist_mode=tier1&sort={{ current_sort }}{% if ran %}&ran={{ ran }}{% endif %}">Tier 1 only</a>
+      </div>
     </div>
     {% if price_svg %}
     <div class="glass-card chart-wrap">{{ price_svg | safe }}</div>
     <div class="chart-legend">
-      <span class="legend-item"><span class="legend-dot tier1-dot"></span>Tier 1</span>
-      <span class="legend-item"><span class="legend-line overall-line"></span>Overall</span>
+      <span class="legend-item"><span class="legend-dot tier1-dot"></span>Cheapest</span>
+      <span class="legend-item"><span class="legend-line overall-line"></span>Distribution</span>
       <span class="legend-item"><span class="legend-dash budget-dash"></span>Budget</span>
+      <span class="legend-item dist-std-legend">&#x25A1; ±1 std dev</span>
     </div>
     {% else %}
     <div class="glass-card">
@@ -195,10 +202,22 @@
     {% endif %}
   </section>
 
-  <!-- All Options — cheapest first -->
+  <!-- All Options -->
   <section class="section">
     <div class="section-header">
-      <span class="section-title">All options &mdash; cheapest first</span>
+      <span class="section-title">All options</span>
+      <div class="filter-pills" id="options-filter-pills">
+        <a class="filter-pill{% if current_sort == 'price' %} active{% endif %}"
+           href="?sort=price&dist_mode={{ dist_mode }}{% if ran %}&ran={{ ran }}{% endif %}">Price</a>
+        <a class="filter-pill{% if current_sort == 'duration' %} active{% endif %}"
+           href="?sort=duration&dist_mode={{ dist_mode }}{% if ran %}&ran={{ ran }}{% endif %}">Duration</a>
+        <a class="filter-pill{% if current_sort == 'stops' %} active{% endif %}"
+           href="?sort=stops&dist_mode={{ dist_mode }}{% if ran %}&ran={{ ran }}{% endif %}">Fewest Stops</a>
+        <a class="filter-pill{% if current_sort == 'effective' %} active{% endif %}"
+           href="?sort=effective&dist_mode={{ dist_mode }}{% if ran %}&ran={{ ran }}{% endif %}">Eff. Cost</a>
+        <a class="filter-pill{% if current_sort == 'tier' %} active{% endif %}"
+           href="?sort=tier&dist_mode={{ dist_mode }}{% if ran %}&ran={{ ran }}{% endif %}">Tier</a>
+      </div>
     </div>
     {% if not ranked_cards %}
     <div class="glass-card">
@@ -243,6 +262,7 @@
           <thead>
             <tr>
               <th>Time</th>
+              <th>Cheapest Price</th>
               <th>Airline</th>
               <th>T1</th>
               <th>T2</th>
@@ -256,6 +276,7 @@
               onclick="window.location='/logs/{{ query_key }}/runs/{{ run.id }}'"
               style="cursor:pointer">
             <td>{{ run.started_at.strftime("%Y-%m-%d %H:%M") }}</td>
+            <td class="run-price-cell">{{ cheapest_price_by_run.get(run.id) or "—" }}</td>
             <td>{{ cheapest_by_run.get(run.id) or "—" }}</td>
             <td>{{ run.tier1_count }}</td>
             <td>{{ run.tier2_count }}</td>

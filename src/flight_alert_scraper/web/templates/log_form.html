@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{% if mode == "add" %}Add flight{% else %}Edit flight{% endif %} &mdash; skydrop{% endblock %}
+{% block head %}
+<script src="/static/airports.js"></script>
+{% endblock %}
 {% block content %}
 <div class="settings-page">
 
@@ -17,12 +20,10 @@
       <legend>Route</legend>
       <div class="field-row">
         <label>Origin
-          <input type="text" name="origin" value="{{ row.origin if row else '' }}"
-                 maxlength="3" required pattern="[A-Z]{3}" placeholder="IAD">
+          <div class="airport-picker" data-name="origin" data-value="{{ row.origin if row else '' }}" data-placeholder="Search city or IATA…"></div>
         </label>
         <label>Destination
-          <input type="text" name="destination" value="{{ row.destination if row else '' }}"
-                 maxlength="3" required pattern="[A-Z]{3}" placeholder="JFK">
+          <div class="airport-picker" data-name="destination" data-value="{{ row.destination if row else '' }}" data-placeholder="Search city or IATA…"></div>
         </label>
         <label>Depart
           <input type="date" name="depart_date" value="{{ row.depart_date if row else '' }}" required>
@@ -87,4 +88,113 @@
   </form>
 
 </div>
+
+<script>
+(function() {
+  function initPicker(container) {
+    const name = container.dataset.name;
+    const initVal = container.dataset.value || '';
+    const placeholder = container.dataset.placeholder || 'Search…';
+
+    // Find initial display label
+    let initLabel = initVal;
+    if (initVal && window.AIRPORTS) {
+      const found = window.AIRPORTS.find(a => a[0] === initVal);
+      if (found) initLabel = found[0] + ' — ' + found[1] + ', ' + found[2];
+    }
+
+    container.innerHTML = `
+      <div class="ap-wrap">
+        <input type="hidden" name="${name}" value="${initVal}" class="ap-hidden" required>
+        <input type="text" class="ap-search" placeholder="${placeholder}" value="${initLabel}" autocomplete="off" spellcheck="false">
+        <div class="ap-dropdown" hidden></div>
+      </div>
+    `;
+
+    const hidden = container.querySelector('.ap-hidden');
+    const search = container.querySelector('.ap-search');
+    const dropdown = container.querySelector('.ap-dropdown');
+    let activeIdx = -1;
+    let lastQuery = '';
+
+    function render(query) {
+      const q = query.trim().toUpperCase();
+      lastQuery = q;
+      if (!q) { dropdown.hidden = true; return; }
+      const matches = [];
+      for (let i = 0; i < window.AIRPORTS.length && matches.length < 40; i++) {
+        const [iata, city, country] = window.AIRPORTS[i];
+        if (iata.startsWith(q) || city.toUpperCase().includes(q) || country.toUpperCase().includes(q)) {
+          matches.push([iata, city, country]);
+        }
+      }
+      if (!matches.length) { dropdown.hidden = true; return; }
+      dropdown.innerHTML = matches.map((m, idx) =>
+        `<div class="ap-opt" data-iata="${m[0]}" data-idx="${idx}">
+          <span class="ap-iata">${m[0]}</span>
+          <span class="ap-name">${m[1]}, ${m[2]}</span>
+        </div>`
+      ).join('');
+      activeIdx = -1;
+      dropdown.hidden = false;
+    }
+
+    function select(iata, label) {
+      hidden.value = iata;
+      search.value = label;
+      dropdown.hidden = true;
+      activeIdx = -1;
+    }
+
+    search.addEventListener('input', () => render(search.value));
+    search.addEventListener('focus', () => { if (search.value) render(search.value); });
+
+    search.addEventListener('keydown', e => {
+      const opts = dropdown.querySelectorAll('.ap-opt');
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeIdx = Math.min(activeIdx + 1, opts.length - 1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeIdx = Math.max(activeIdx - 1, 0);
+      } else if (e.key === 'Enter' && activeIdx >= 0) {
+        e.preventDefault();
+        const opt = opts[activeIdx];
+        if (opt) select(opt.dataset.iata, opt.querySelector('.ap-iata').textContent + ' — ' + opt.querySelector('.ap-name').textContent);
+        return;
+      } else if (e.key === 'Escape') {
+        dropdown.hidden = true; return;
+      }
+      opts.forEach((o, i) => o.classList.toggle('ap-active', i === activeIdx));
+      if (activeIdx >= 0 && opts[activeIdx]) opts[activeIdx].scrollIntoView({ block: 'nearest' });
+    });
+
+    dropdown.addEventListener('mousedown', e => {
+      const opt = e.target.closest('.ap-opt');
+      if (!opt) return;
+      e.preventDefault();
+      select(opt.dataset.iata, opt.querySelector('.ap-iata').textContent + ' — ' + opt.querySelector('.ap-name').textContent);
+    });
+
+    document.addEventListener('click', e => {
+      if (!container.contains(e.target)) dropdown.hidden = true;
+    });
+
+    // Clear hidden value when user starts typing a new value
+    search.addEventListener('keyup', () => {
+      if (search.value === '') hidden.value = '';
+    });
+  }
+
+  function initAll() {
+    document.querySelectorAll('.airport-picker').forEach(initPicker);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAll);
+  } else {
+    initAll();
+  }
+})();
+</script>
 {% endblock %}

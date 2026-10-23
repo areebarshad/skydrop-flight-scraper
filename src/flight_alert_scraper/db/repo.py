@@ -241,6 +241,23 @@ def get_price_history(
     return result
 
 
+def get_cheapest_price_by_run(
+    session: Session, run_ids: list[int]
+) -> dict[int, Decimal]:
+    if not run_ids:
+        return {}
+    stmt = (
+        select(FlightSnapshot)
+        .where(FlightSnapshot.run_id.in_(run_ids))  # type: ignore[attr-defined]
+        .order_by(FlightSnapshot.run_id, FlightSnapshot.price_usd)  # type: ignore[arg-type]
+    )
+    result: dict[int, Decimal] = {}
+    for snap in session.exec(stmt).all():
+        if snap.run_id not in result:
+            result[snap.run_id] = snap.price_usd
+    return result
+
+
 def get_recent_alerts(
     session: Session, query_key: str, limit: int = 20
 ) -> list[AlertLog]:

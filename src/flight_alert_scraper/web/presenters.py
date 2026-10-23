@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -61,110 +62,162 @@ def snapshot_to_card(snap: FlightSnapshot) -> dict[str, Any]:
         "price": fmt_price(snap.price_usd),
         "price_raw": float(snap.price_usd),
         "duration": fmt_duration(snap.total_duration_minutes),
+        "duration_raw": snap.total_duration_minutes,
         "stops": snap.stops,
         "carriers": _full_carrier_names(snap.option_json, snap.carriers),
         "tier": snap.tier,
         "labels": labels,
         "effective_cost": fmt_price(snap.effective_cost_usd),
+        "effective_raw": float(snap.effective_cost_usd),
         "booking_link": booking_link,
     }
 
 
-def build_price_svg(history: list[PriceHistoryPoint], budget: Decimal) -> str | None:
+def build_price_distribution_svg(
+    history: list[PriceHistoryPoint],
+    budget: Decimal,
+    mode: str = "overall",
+) -> str | None:
+    """Normal distribution (bell curve) of historical prices."""
     if not history:
         return None
-    W, H = 600, 130
-    PT, PR, PB, PL = 10, 15, 30, 55
-    chart_w = W - PL - PR
-    chart_h = H - PT - PB
 
-    all_prices: list[float] = [float(budget)]
-    for h in history:
-        if h["min_tier1_price"] is not None:
-            all_prices.append(float(h["min_tier1_price"]))
-        all_prices.append(float(h["min_overall_price"]))
-    min_p = min(all_prices) * 0.95
-    max_p = max(all_prices) * 1.05
-    p_range = max_p - min_p or 1.0
-    n = len(history)
+    raw_overall = [float(h["min_overall_price"]) for h in history]
+    raw_tier1 = [float(h["min_tier1_price"]) for h in history if h["min_tier1_price"] is not None]
 
-    def px(i: int) -> float:
-        if n == 1:
-            return PL + chart_w / 2.0
-        return PL + (i / (n - 1)) * chart_w
+    prices = raw_tier1 if mode == "tier1" and raw_tier1 else raw_overall
+    if not prices:
+        return None
 
-    def py(price: float) -> float:
-        return PT + chart_h - (price - min_p) / p_range * chart_h
+    n = len(prices)
+    mean = sum(prices) / n
+    variance = sum((p - mean) ** 2 for p in prices) / n
+    std = math.sqrt(variance) if variance > 1 else mean * 0.05
+    budget_val = float(budget)
+    min_price = min(prices)
 
-    budget_y = py(float(budget))
-    first_label = history[0]["observed_at"].strftime("%b %d")
-    last_label = history[-1]["observed_at"].strftime("%b %d")
+    # X range covers all data + 2.5 std each side + budget
+    x_lo = min(min_price, mean - 2.5 * std, budget_val) * 0.97
+    x_hi = max(max(prices), mean + 2.5 * std, budget_val) * 1.03
+    x_range = x_hi - x_lo or 1.0
+
+    W, H = 600, 170
+    PT, PR, PB, PL = 16, 20, 48, 20
+    cw = W - PL - PR
+    ch = H - PT - PB
+    baseline_y = PT + ch
+
+    def sx(v: float) -> float:
+        return PL + (v - x_lo) / x_range * cw
+
+    max_pdf = 1.0 / (std * math.sqrt(2 * math.pi))
+
+    # Bell curve polyline (200 steps)
+    n_steps = 200
+    curve_pts: list[str] = []
+    for i in range(n_steps + 1):
+        xv = x_lo + x_range * i / n_steps
+        z = (xv - mean) / std
+        pdf = math.exp(-0.5 * z * z) / (std * math.sqrt(2 * math.pi))
+        yv = PT + ch - (pdf / max_pdf) * ch * 0.82
+        curve_pts.append(f"{sx(xv):.1f},{yv:.1f}")
+
+    # Filled area polygon (close bottom of curve)
+    fill_pts = (
+        curve_pts
+        + [f"{sx(x_hi):.1f},{baseline_y}", f"{sx(x_lo):.1f},{baseline_y}"]
+    )
 
     ns = 'xmlns="http://www.w3.org/2000/svg"'
-    parts = [
-        f'<svg viewBox="0 0 {W} {H}" {ns} class="price-chart" aria-hidden="true">'
+    parts = [f'<svg viewBox="0 0 {W} {H}" {ns} class="price-chart dist-chart" aria-hidden="true">']
+
+    # ±1 std band
+    x1s = sx(mean - std)
+    x2s = sx(mean + std)
+    parts.append(
+        f'  <rect x="{x1s:.1f}" y="{PT}" width="{x2s - x1s:.1f}" height="{ch}"'
+        f' fill="rgba(0,102,255,0.04)" stroke="none"/>'
+    )
+
+    # Fill under curve
+    parts.append(
+        f'  <polygon points="{" ".join(fill_pts)}" fill="rgba(0,102,255,0.07)" stroke="none"/>'
+    )
+
+    # Curve line
+    parts.append(
+        f'  <polyline points="{" ".join(curve_pts)}" fill="none"'
+        f' stroke="var(--c-line-overall)" stroke-width="2" stroke-linejoin="round"/>'
+    )
+
+    # Baseline axis
+    parts.append(
+        f'  <line x1="{PL}" y1="{baseline_y}" x2="{W - PR}" y2="{baseline_y}"'
+        f' stroke="rgba(148,163,184,0.4)" stroke-width="1"/>'
+    )
+
+    # Data point ticks on baseline
+    for p in prices:
+        xi = sx(p)
+        is_cheapest = p == min_price
+        color = "var(--tier1)" if is_cheapest else "var(--c-line-overall)"
+        tick_h = 8 if is_cheapest else 5
+        parts.append(
+            f'  <line x1="{xi:.1f}" y1="{baseline_y - tick_h}" x2="{xi:.1f}" y2="{baseline_y + 3}"'
+            f' stroke="{color}" stroke-width="{2 if is_cheapest else 1.5}" stroke-linecap="round"/>'
+        )
+
+    # Cheapest dot above baseline
+    xi_cheap = sx(min_price)
+    parts.append(
+        f'  <circle cx="{xi_cheap:.1f}" cy="{baseline_y - 16}" r="5"'
+        f' fill="var(--tier1)" stroke="white" stroke-width="2"/>'
+    )
+    parts.append(
+        f'  <text x="{xi_cheap:.1f}" y="{baseline_y - 26}" text-anchor="middle"'
+        f' class="chart-label dist-label-deal">best</text>'
+    )
+
+    # Mean vertical dashed
+    xi_mean = sx(mean)
+    parts.append(
+        f'  <line x1="{xi_mean:.1f}" y1="{PT}" x2="{xi_mean:.1f}" y2="{baseline_y}"'
+        f' stroke="var(--c-line-overall)" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.55"/>'
+    )
+    parts.append(
+        f'  <text x="{xi_mean:.1f}" y="{PT + 9}" text-anchor="middle" class="chart-label">avg</text>'
+    )
+
+    # Budget vertical dashed (only if within range)
+    if x_lo < budget_val < x_hi:
+        xi_budget = sx(budget_val)
+        parts.append(
+            f'  <line x1="{xi_budget:.1f}" y1="{PT}" x2="{xi_budget:.1f}" y2="{baseline_y}"'
+            f' stroke="var(--c-budget-line)" stroke-width="1.5" stroke-dasharray="5 3"/>'
+        )
+
+    # X-axis price labels — cheapest, mean, budget
+    label_xs: list[tuple[str, float]] = [
+        (f"${int(min_price):,}", xi_cheap),
+        (f"avg ${int(mean):,}", xi_mean),
     ]
-    overall_stroke = 'stroke="var(--c-line-overall)" stroke-width="1.5" opacity="0.5"'
-    if n == 1:
-        ox = px(0)
-        oy = py(float(history[0]["min_overall_price"]))
+    if x_lo < budget_val < x_hi:
+        label_xs.append((f"budget ${int(budget_val):,}", sx(budget_val)))
+
+    for txt, lx in label_xs:
+        anchor = "middle"
+        if lx < PL + 40:
+            anchor = "start"
+        elif lx > W - PR - 40:
+            anchor = "end"
         parts.append(
-            f'  <circle cx="{ox:.1f}" cy="{oy:.1f}" r="3.5"'
-            ' fill="var(--c-line-overall)" opacity="0.5"/>'
-        )
-    else:
-        overall_pts = " ".join(
-            f"{px(i):.1f},{py(float(h['min_overall_price'])):.1f}"
-            for i, h in enumerate(history)
-        )
-        parts.append(
-            f'  <polyline points="{overall_pts}" fill="none" {overall_stroke}/>'
+            f'  <text x="{lx:.1f}" y="{H - 6}" text-anchor="{anchor}" class="chart-label">{txt}</text>'
         )
 
-    tier1_segs: list[list[str]] = []
-    seg: list[str] = []
-    for i, h in enumerate(history):
-        if h["min_tier1_price"] is not None:
-            seg.append(f"{px(i):.1f},{py(float(h['min_tier1_price'])):.1f}")
-        else:
-            if seg:
-                tier1_segs.append(seg)
-                seg = []
-    if seg:
-        tier1_segs.append(seg)
-
-    t1_stroke = 'stroke="var(--c-line-tier1)" stroke-width="2.5"'
-    for s in tier1_segs:
-        if len(s) >= 2:
-            pts_str = " ".join(s)
-            parts.append(
-                f'  <polyline points="{pts_str}" fill="none" {t1_stroke}/>'
-            )
-        elif len(s) == 1:
-            x, y = s[0].split(",")
-            parts.append(
-                f'  <circle cx="{x}" cy="{y}" r="3.5" fill="var(--c-line-tier1)"/>'
-            )
-    parts.append(
-        f'  <line x1="{PL}" y1="{budget_y:.1f}" x2="{W - PR}" y2="{budget_y:.1f}"'
-        f' stroke="var(--c-budget-line)" stroke-width="1.5" stroke-dasharray="5 3"/>'
-    )
-    for label, yval in [
-        (f"${int(min_p)}", py(min_p)),
-        (f"${int(float(budget))}", budget_y),
-        (f"${int(max_p)}", py(max_p)),
-    ]:
-        parts.append(
-            f'  <text x="{PL - 4}" y="{yval:.1f}" text-anchor="end"'
-            f' dominant-baseline="middle" class="chart-label">{label}</text>'
-        )
-    parts.append(
-        f'  <text x="{PL}" y="{H - 5}" text-anchor="start"'
-        f' class="chart-label">{first_label}</text>'
-    )
-    parts.append(
-        f'  <text x="{W - PR}" y="{H - 5}" text-anchor="end"'
-        f' class="chart-label">{last_label}</text>'
-    )
     parts.append("</svg>")
     return "\n".join(parts)
+
+
+def build_price_svg(history: list[PriceHistoryPoint], budget: Decimal) -> str | None:
+    """Legacy alias — delegates to distribution chart."""
+    return build_price_distribution_svg(history, budget, mode="overall")

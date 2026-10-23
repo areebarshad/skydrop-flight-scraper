@@ -32,8 +32,9 @@
         <span class="route-iata">{{ row.destination }}</span>
       </div>
       <div class="log-row-constraints">
-        {{ row.depart_date }}{% if row.return_date %} &ndash; {{ row.return_date }}{% endif %}
-        &middot; {{ row.cabin }} &middot; {{ row.adults }} pax
+        {{ row.depart_date }}{% if row.return_date %} &#x2192; {{ row.return_date }}{% endif %}
+        &middot; Class: {% if row.cabin == 'economy' %}Economy{% elif row.cabin == 'premium_economy' %}Economy Plus{% elif row.cabin == 'business' %}Business{% elif row.cabin == 'first' %}First{% else %}{{ row.cabin }}{% endif %}
+        &middot; No. of Passengers: {{ row.adults }}
       </div>
     </div>
     <div class="log-row-stats">
