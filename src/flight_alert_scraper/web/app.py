@@ -42,6 +42,7 @@ from flight_alert_scraper.web.presenters import (
     fmt_price,
     fmt_relative_time,
     snapshot_to_card,
+    compute_chart_stats,
 )
 from flight_alert_scraper.web.watchlist_io import load_watchlist_raw, save_watchlist
 
@@ -67,15 +68,26 @@ def create_app(settings: Settings) -> FastAPI:
                 except Exception:
                     continue
                 wq = session.get(WatchedQuery, key)
-                latest_run = get_latest_run(session, key) if wq else None
-                snapshots = (
-                    get_snapshots_for_run(session, latest_run.id)
-                    if latest_run and latest_run.id
-                    else []
-                )
-                cards = [snapshot_to_card(s) for s in snapshots]
-                best_price = min((c["price_raw"] for c in cards), default=None)
-                tier1_count = sum(1 for c in cards if c["tier"] == 1)
+                # Always query for latest_run — don't gate on wq existing in DB
+                latest_run = get_latest_run(session, key)
+                # Use full price history so we always show historical best price
+                # even when the most recent scrape returned 0 results
+                price_history = get_price_history(session, key)
+                if price_history:
+                    best_price_raw = float(min(h["min_overall_price"] for h in price_history))
+                    best_price: str | None = f"${best_price_raw:,.0f}"
+                    tier1_count = price_history[-1]["tier1_count"]
+                else:
+                    snapshots = (
+                        get_snapshots_for_run(session, latest_run.id)
+                        if latest_run and latest_run.id
+                        else []
+                    )
+                    cards = [snapshot_to_card(s) for s in snapshots]
+                    best_price = (
+                        f"${min(c['price_raw'] for c in cards):,.0f}" if cards else None
+                    )
+                    tier1_count = sum(1 for c in cards if c["tier"] == 1)
                 rows.append(
                     {
                         "query_key": key,
@@ -85,9 +97,7 @@ def create_app(settings: Settings) -> FastAPI:
                         "return_date": raw.get("return_date"),
                         "cabin": raw.get("cabin", "economy"),
                         "adults": raw.get("adults", 1),
-                        "best_price": (
-                            f"${best_price:,.0f}" if best_price is not None else None
-                        ),
+                        "best_price": best_price,
                         "tier1_count": tier1_count,
                         "last_checked_str": fmt_relative_time(
                             wq.last_checked_at if wq else None
@@ -413,6 +423,11 @@ def create_app(settings: Settings) -> FastAPI:
             if len(price_history) >= 1
             else None
         )
+        chart_stats = compute_chart_stats(price_history, budget, mode=dist_mode_safe)
+        ranked_cards_json = json.dumps(
+            [{"price_raw": c["price_raw"], "carriers": c["carriers"],
+              "booking_link": c["booking_link"], "tier": c["tier"]} for c in all_cards]
+        )
 
         constraint_line_parts = [f"budget ${budget:,.0f}"]
         if max_dur_min:
@@ -446,6 +461,8 @@ def create_app(settings: Settings) -> FastAPI:
                 "current_sort": sort,
                 "dist_mode": dist_mode_safe,
                 "ran": ran,
+                "chart_stats": chart_stats,
+                "ranked_cards_json": ranked_cards_json,
             },
         )
 

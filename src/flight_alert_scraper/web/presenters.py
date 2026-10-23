@@ -73,12 +73,37 @@ def snapshot_to_card(snap: FlightSnapshot) -> dict[str, Any]:
     }
 
 
+def compute_chart_stats(
+    history: list[PriceHistoryPoint],
+    budget: Decimal,
+    mode: str = "overall",
+) -> dict[str, Any] | None:
+    """Return mean/std/best stats for displaying below the chart."""
+    if not history:
+        return None
+    raw_overall = [float(h["min_overall_price"]) for h in history]
+    raw_tier1 = [float(h["min_tier1_price"]) for h in history if h["min_tier1_price"] is not None]
+    prices = raw_tier1 if mode == "tier1" and raw_tier1 else raw_overall
+    if not prices:
+        return None
+    n = len(prices)
+    mean = sum(prices) / n
+    variance = sum((p - mean) ** 2 for p in prices) / (n - 1) if n > 1 else 0
+    std = math.sqrt(variance) if variance > 0 else mean * 0.06
+    return {
+        "mean": fmt_price(Decimal(str(round(mean))).quantize(Decimal("1"))),
+        "std": fmt_price(Decimal(str(round(std))).quantize(Decimal("1"))),
+        "best": fmt_price(Decimal(str(round(min(prices)))).quantize(Decimal("1"))),
+        "n": n,
+    }
+
+
 def build_price_distribution_svg(
     history: list[PriceHistoryPoint],
     budget: Decimal,
     mode: str = "overall",
 ) -> str | None:
-    """Normal distribution (bell curve) of historical prices."""
+    """Modern glassy bell-curve distribution chart."""
     if not history:
         return None
 
@@ -91,18 +116,17 @@ def build_price_distribution_svg(
 
     n = len(prices)
     mean = sum(prices) / n
-    variance = sum((p - mean) ** 2 for p in prices) / n
-    std = math.sqrt(variance) if variance > 1 else mean * 0.05
+    variance = sum((p - mean) ** 2 for p in prices) / (n - 1) if n > 1 else 0
+    std = math.sqrt(variance) if variance > 0 else mean * 0.06
     budget_val = float(budget)
     min_price = min(prices)
 
-    # X range covers all data + 2.5 std each side + budget
-    x_lo = min(min_price, mean - 2.5 * std, budget_val) * 0.97
-    x_hi = max(max(prices), mean + 2.5 * std, budget_val) * 1.03
+    x_lo = min(min_price, mean - 2.8 * std, budget_val) * 0.96
+    x_hi = max(max(prices), mean + 2.8 * std, budget_val) * 1.04
     x_range = x_hi - x_lo or 1.0
 
-    W, H = 600, 170
-    PT, PR, PB, PL = 16, 20, 48, 20
+    W, H = 640, 190
+    PT, PR, PB, PL = 28, 28, 46, 36
     cw = W - PL - PR
     ch = H - PT - PB
     baseline_y = PT + ch
@@ -110,109 +134,157 @@ def build_price_distribution_svg(
     def sx(v: float) -> float:
         return PL + (v - x_lo) / x_range * cw
 
-    max_pdf = 1.0 / (std * math.sqrt(2 * math.pi))
+    def curve_y(xv: float) -> float:
+        max_pdf = 1.0 / (std * math.sqrt(2 * math.pi))
+        z = (xv - mean) / std
+        pdf = math.exp(-0.5 * z * z) / (std * math.sqrt(2 * math.pi))
+        return PT + ch - (pdf / max_pdf) * ch * 0.84
 
-    # Bell curve polyline (200 steps)
-    n_steps = 200
+    n_steps = 320
     curve_pts: list[str] = []
     for i in range(n_steps + 1):
         xv = x_lo + x_range * i / n_steps
-        z = (xv - mean) / std
-        pdf = math.exp(-0.5 * z * z) / (std * math.sqrt(2 * math.pi))
-        yv = PT + ch - (pdf / max_pdf) * ch * 0.82
-        curve_pts.append(f"{sx(xv):.1f},{yv:.1f}")
+        curve_pts.append(f"{sx(xv):.1f},{curve_y(xv):.1f}")
 
-    # Filled area polygon (close bottom of curve)
-    fill_pts = (
-        curve_pts
-        + [f"{sx(x_hi):.1f},{baseline_y}", f"{sx(x_lo):.1f},{baseline_y}"]
-    )
+    fill_pts = curve_pts + [f"{sx(x_hi):.1f},{baseline_y}", f"{sx(x_lo):.1f},{baseline_y}"]
 
     ns = 'xmlns="http://www.w3.org/2000/svg"'
-    parts = [f'<svg viewBox="0 0 {W} {H}" {ns} class="price-chart dist-chart" aria-hidden="true">']
+    grad_id = f"cg{mode}"
+    glow_id = f"gw{mode}"
+    data_attrs = (
+        f'data-xlo="{x_lo:.2f}" data-xhi="{x_hi:.2f}" '
+        f'data-pl="{PL}" data-pt="{PT}" data-cw="{cw:.2f}" data-ch="{ch:.2f}" '
+        f'data-baseline="{baseline_y}" data-mean="{mean:.2f}" data-std="{std:.2f}" '
+        f'data-w="{W}" data-h="{H}"'
+    )
 
-    # ±1 std band
+    parts = [f'<svg viewBox="0 0 {W} {H}" {ns} class="price-chart dist-chart" '
+             f'style="cursor:crosshair;overflow:visible" {data_attrs}>']
+
+    # Defs: gradient + glow filter
+    parts.append(f'''  <defs>
+    <linearGradient id="{grad_id}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(0,120,255,0.38)"/>
+      <stop offset="75%" stop-color="rgba(0,80,200,0.12)"/>
+      <stop offset="100%" stop-color="rgba(0,60,180,0.02)"/>
+    </linearGradient>
+    <filter id="{glow_id}" x="-10%" y="-30%" width="120%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>''')
+
+    # ±1 std band — subtle
     x1s = sx(mean - std)
     x2s = sx(mean + std)
     parts.append(
-        f'  <rect x="{x1s:.1f}" y="{PT}" width="{x2s - x1s:.1f}" height="{ch}"'
-        f' fill="rgba(0,102,255,0.04)" stroke="none"/>'
+        f'  <rect x="{x1s:.1f}" y="{PT}" width="{x2s - x1s:.1f}" height="{ch}" '
+        f'fill="rgba(0,100,255,0.04)" stroke="rgba(0,100,255,0.12)" '
+        f'stroke-width="0.5" stroke-dasharray="2 3" rx="2"/>'
     )
 
     # Fill under curve
     parts.append(
-        f'  <polygon points="{" ".join(fill_pts)}" fill="rgba(0,102,255,0.07)" stroke="none"/>'
+        f'  <polygon points="{" ".join(fill_pts)}" fill="url(#{grad_id})" stroke="none"/>'
     )
 
-    # Curve line
+    # Glow layer of curve
     parts.append(
-        f'  <polyline points="{" ".join(curve_pts)}" fill="none"'
-        f' stroke="var(--c-line-overall)" stroke-width="2" stroke-linejoin="round"/>'
+        f'  <polyline points="{" ".join(curve_pts)}" fill="none" '
+        f'stroke="rgba(0,140,255,0.45)" stroke-width="4" stroke-linejoin="round" '
+        f'filter="url(#{glow_id})"/>'
     )
-
-    # Baseline axis
+    # Crisp curve on top
     parts.append(
-        f'  <line x1="{PL}" y1="{baseline_y}" x2="{W - PR}" y2="{baseline_y}"'
-        f' stroke="rgba(148,163,184,0.4)" stroke-width="1"/>'
+        f'  <polyline points="{" ".join(curve_pts)}" fill="none" '
+        f'stroke="rgba(30,160,255,0.92)" stroke-width="1.8" stroke-linejoin="round"/>'
     )
 
-    # Data point ticks on baseline
+    # Baseline
+    parts.append(
+        f'  <line x1="{PL}" y1="{baseline_y}" x2="{W - PR}" y2="{baseline_y}" '
+        f'stroke="rgba(148,163,184,0.25)" stroke-width="1"/>'
+    )
+
+    # Budget line
+    if x_lo < budget_val < x_hi:
+        xi_b = sx(budget_val)
+        parts.append(
+            f'  <line x1="{xi_b:.1f}" y1="{PT + 4}" x2="{xi_b:.1f}" y2="{baseline_y}" '
+            f'stroke="rgba(244,63,94,0.55)" stroke-width="1.5" stroke-dasharray="5 3"/>'
+        )
+        bx_anchor = "middle"
+        if xi_b < PL + 50:
+            bx_anchor = "start"
+        elif xi_b > W - PR - 50:
+            bx_anchor = "end"
+        parts.append(
+            f'  <text x="{xi_b:.1f}" y="{H - 4}" text-anchor="{bx_anchor}" '
+            f'class="chart-label" fill="rgba(244,63,94,0.65)">budget ${int(budget_val):,}</text>'
+        )
+
+    # Data ticks
     for p in prices:
         xi = sx(p)
-        is_cheapest = p == min_price
-        color = "var(--tier1)" if is_cheapest else "var(--c-line-overall)"
-        tick_h = 8 if is_cheapest else 5
+        is_best = p == min_price
+        col = "rgba(16,185,129,0.85)" if is_best else "rgba(100,116,139,0.35)"
+        th = 8 if is_best else 4
         parts.append(
-            f'  <line x1="{xi:.1f}" y1="{baseline_y - tick_h}" x2="{xi:.1f}" y2="{baseline_y + 3}"'
-            f' stroke="{color}" stroke-width="{2 if is_cheapest else 1.5}" stroke-linecap="round"/>'
+            f'  <line x1="{xi:.1f}" y1="{baseline_y - th}" x2="{xi:.1f}" y2="{baseline_y + 2}" '
+            f'stroke="{col}" stroke-width="{2 if is_best else 1}" stroke-linecap="round"/>'
         )
 
-    # Cheapest dot above baseline
+    # Best marker
     xi_cheap = sx(min_price)
+    cy_best = curve_y(min_price)
     parts.append(
-        f'  <circle cx="{xi_cheap:.1f}" cy="{baseline_y - 16}" r="5"'
-        f' fill="var(--tier1)" stroke="white" stroke-width="2"/>'
+        f'  <line x1="{xi_cheap:.1f}" y1="{cy_best:.1f}" x2="{xi_cheap:.1f}" y2="{baseline_y - 10}" '
+        f'stroke="rgba(16,185,129,0.5)" stroke-width="1" stroke-dasharray="3 2"/>'
     )
     parts.append(
-        f'  <text x="{xi_cheap:.1f}" y="{baseline_y - 26}" text-anchor="middle"'
-        f' class="chart-label dist-label-deal">best</text>'
+        f'  <circle cx="{xi_cheap:.1f}" cy="{cy_best:.1f}" r="5" '
+        f'fill="rgba(16,185,129,0.9)" stroke="rgba(255,255,255,0.85)" stroke-width="1.5"/>'
     )
 
-    # Mean vertical dashed
+    # Mean dashed line
     xi_mean = sx(mean)
     parts.append(
-        f'  <line x1="{xi_mean:.1f}" y1="{PT}" x2="{xi_mean:.1f}" y2="{baseline_y}"'
-        f' stroke="var(--c-line-overall)" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.55"/>'
-    )
-    parts.append(
-        f'  <text x="{xi_mean:.1f}" y="{PT + 9}" text-anchor="middle" class="chart-label">avg</text>'
+        f'  <line x1="{xi_mean:.1f}" y1="{PT + 2}" x2="{xi_mean:.1f}" y2="{baseline_y}" '
+        f'stroke="rgba(148,163,184,0.35)" stroke-width="1" stroke-dasharray="4 3"/>'
     )
 
-    # Budget vertical dashed (only if within range)
-    if x_lo < budget_val < x_hi:
-        xi_budget = sx(budget_val)
-        parts.append(
-            f'  <line x1="{xi_budget:.1f}" y1="{PT}" x2="{xi_budget:.1f}" y2="{baseline_y}"'
-            f' stroke="var(--c-budget-line)" stroke-width="1.5" stroke-dasharray="5 3"/>'
-        )
-
-    # X-axis price labels — cheapest, mean, budget
-    label_xs: list[tuple[str, float]] = [
-        (f"${int(min_price):,}", xi_cheap),
-        (f"avg ${int(mean):,}", xi_mean),
-    ]
-    if x_lo < budget_val < x_hi:
-        label_xs.append((f"budget ${int(budget_val):,}", sx(budget_val)))
-
-    for txt, lx in label_xs:
+    # X-axis labels
+    def _lbl(txt: str, lx: float, color: str = "rgba(100,116,139,0.7)") -> None:
         anchor = "middle"
-        if lx < PL + 40:
+        if lx < PL + 44:
             anchor = "start"
-        elif lx > W - PR - 40:
+        elif lx > W - PR - 44:
             anchor = "end"
         parts.append(
-            f'  <text x="{lx:.1f}" y="{H - 6}" text-anchor="{anchor}" class="chart-label">{txt}</text>'
+            f'  <text x="{lx:.1f}" y="{H - 4}" text-anchor="{anchor}" '
+            f'class="chart-label" fill="{color}">{txt}</text>'
         )
+
+    _lbl(f"best ${int(min_price):,}", xi_cheap, "rgba(16,185,129,0.8)")
+    _lbl(f"avg ${int(mean):,}", xi_mean)
+
+    # Interactive cursor group (JS will move/show these)
+    parts.append(f'  <g id="dist-cursor" visibility="hidden" pointer-events="none">')
+    parts.append(
+        f'    <line id="dist-cursor-vline" x1="0" y1="{PT}" x2="0" y2="{baseline_y}" '
+        f'stroke="rgba(255,255,255,0.55)" stroke-width="1" stroke-dasharray="3 2"/>'
+    )
+    parts.append(
+        f'    <circle id="dist-cursor-dot" cx="0" cy="{PT}" r="4.5" '
+        f'fill="rgba(0,140,255,0.9)" stroke="rgba(255,255,255,0.85)" stroke-width="1.5"/>'
+    )
+    parts.append('  </g>')
+
+    # Transparent hit area — on top so it captures mouse events
+    parts.append(
+        f'  <rect class="dist-hit" x="{PL}" y="{PT}" width="{cw:.1f}" height="{ch}" '
+        f'fill="transparent"/>'
+    )
 
     parts.append("</svg>")
     return "\n".join(parts)

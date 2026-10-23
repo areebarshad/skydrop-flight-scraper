@@ -180,21 +180,31 @@
   <section class="section">
     <div class="section-header">
       <span class="section-title">Price distribution</span>
-      <div class="filter-pills filter-pills-sm" id="dist-filter-pills">
-        <a class="filter-pill{% if dist_mode == 'overall' %} active{% endif %}"
-           href="?dist_mode=overall&sort={{ current_sort }}{% if ran %}&ran={{ ran }}{% endif %}">All prices</a>
-        <a class="filter-pill{% if dist_mode == 'tier1' %} active{% endif %}"
-           href="?dist_mode=tier1&sort={{ current_sort }}{% if ran %}&ran={{ ran }}{% endif %}">Tier 1 only</a>
-      </div>
+      <select class="filter-select filter-select-sm"
+              onchange="window.location.href=this.value"
+              aria-label="Distribution mode">
+        <option value="?dist_mode=overall&sort={{ current_sort }}{% if ran %}&ran={{ ran }}{% endif %}"
+          {% if dist_mode == 'overall' %}selected{% endif %}>All prices</option>
+        <option value="?dist_mode=tier1&sort={{ current_sort }}{% if ran %}&ran={{ ran }}{% endif %}"
+          {% if dist_mode == 'tier1' %}selected{% endif %}>Tier 1 only</option>
+      </select>
     </div>
     {% if price_svg %}
-    <div class="glass-card chart-wrap">{{ price_svg | safe }}</div>
-    <div class="chart-legend">
-      <span class="legend-item"><span class="legend-dot tier1-dot"></span>Cheapest</span>
-      <span class="legend-item"><span class="legend-line overall-line"></span>Distribution</span>
-      <span class="legend-item"><span class="legend-dash budget-dash"></span>Budget</span>
-      <span class="legend-item dist-std-legend">&#x25A1; ±1 std dev</span>
+    <div class="glass-card chart-wrap chart-dark" style="position:relative">
+      <div id="dist-chart-wrap">{{ price_svg | safe }}</div>
+      <div id="dist-tooltip" class="dist-tooltip" hidden></div>
     </div>
+    {% if chart_stats %}
+    <div class="chart-stats-row">
+      <span class="chart-stat"><span class="chart-stat-label">Best fare</span> <strong>{{ chart_stats.best }}</strong></span>
+      <span class="chart-stat-sep">·</span>
+      <span class="chart-stat"><span class="chart-stat-label">Avg price</span> <strong>{{ chart_stats.mean }}</strong></span>
+      <span class="chart-stat-sep">·</span>
+      <span class="chart-stat"><span class="chart-stat-label">Std dev</span> {{ chart_stats.std }}</span>
+      <span class="chart-stat-sep">·</span>
+      <span class="chart-stat"><span class="chart-stat-label">Runs</span> {{ chart_stats.n }}</span>
+    </div>
+    {% endif %}
     {% else %}
     <div class="glass-card">
       <p class="empty-state">No snapshot data yet. Run a check to populate.</p>
@@ -206,18 +216,20 @@
   <section class="section">
     <div class="section-header">
       <span class="section-title">All options</span>
-      <div class="filter-pills" id="options-filter-pills">
-        <a class="filter-pill{% if current_sort == 'price' %} active{% endif %}"
-           href="?sort=price&dist_mode={{ dist_mode }}{% if ran %}&ran={{ ran }}{% endif %}">Price</a>
-        <a class="filter-pill{% if current_sort == 'duration' %} active{% endif %}"
-           href="?sort=duration&dist_mode={{ dist_mode }}{% if ran %}&ran={{ ran }}{% endif %}">Duration</a>
-        <a class="filter-pill{% if current_sort == 'stops' %} active{% endif %}"
-           href="?sort=stops&dist_mode={{ dist_mode }}{% if ran %}&ran={{ ran }}{% endif %}">Fewest Stops</a>
-        <a class="filter-pill{% if current_sort == 'effective' %} active{% endif %}"
-           href="?sort=effective&dist_mode={{ dist_mode }}{% if ran %}&ran={{ ran }}{% endif %}">Eff. Cost</a>
-        <a class="filter-pill{% if current_sort == 'tier' %} active{% endif %}"
-           href="?sort=tier&dist_mode={{ dist_mode }}{% if ran %}&ran={{ ran }}{% endif %}">Tier</a>
-      </div>
+      <select class="filter-select"
+              onchange="window.location.href=this.value"
+              aria-label="Sort options by">
+        <option value="?sort=price&dist_mode={{ dist_mode }}{% if ran %}&ran={{ ran }}{% endif %}"
+          {% if current_sort == 'price' %}selected{% endif %}>Sort: Price</option>
+        <option value="?sort=duration&dist_mode={{ dist_mode }}{% if ran %}&ran={{ ran }}{% endif %}"
+          {% if current_sort == 'duration' %}selected{% endif %}>Sort: Duration</option>
+        <option value="?sort=stops&dist_mode={{ dist_mode }}{% if ran %}&ran={{ ran }}{% endif %}"
+          {% if current_sort == 'stops' %}selected{% endif %}>Sort: Fewest Stops</option>
+        <option value="?sort=effective&dist_mode={{ dist_mode }}{% if ran %}&ran={{ ran }}{% endif %}"
+          {% if current_sort == 'effective' %}selected{% endif %}>Sort: Eff. Cost</option>
+        <option value="?sort=tier&dist_mode={{ dist_mode }}{% if ran %}&ran={{ ran }}{% endif %}"
+          {% if current_sort == 'tier' %}selected{% endif %}>Sort: Tier</option>
+      </select>
     </div>
     {% if not ranked_cards %}
     <div class="glass-card">
@@ -306,4 +318,108 @@
   {% endif %}
 
 </div>
+
+<script>
+(function() {
+  var svg = document.querySelector('.price-chart.dist-chart');
+  if (!svg) return;
+
+  var xlo    = parseFloat(svg.dataset.xlo);
+  var xhi    = parseFloat(svg.dataset.xhi);
+  var pl     = parseFloat(svg.dataset.pl);
+  var pt     = parseFloat(svg.dataset.pt);
+  var cw     = parseFloat(svg.dataset.cw);
+  var ch     = parseFloat(svg.dataset.ch);
+  var baseline = parseFloat(svg.dataset.baseline);
+  var mean   = parseFloat(svg.dataset.mean);
+  var std    = parseFloat(svg.dataset.std);
+  var vbW    = parseFloat(svg.dataset.w);
+  var vbH    = parseFloat(svg.dataset.h);
+
+  var cards  = {{ ranked_cards_json | safe }};
+  var tooltip = document.getElementById('dist-tooltip');
+  var cursorG = document.getElementById('dist-cursor');
+  var cursorLine = document.getElementById('dist-cursor-vline');
+  var cursorDot  = document.getElementById('dist-cursor-dot');
+
+  function pdfY(xv) {
+    var maxPdf = 1.0 / (std * Math.sqrt(2 * Math.PI));
+    var z = (xv - mean) / std;
+    var pdf = Math.exp(-0.5 * z * z) / (std * Math.sqrt(2 * Math.PI));
+    return pt + ch - (pdf / maxPdf) * ch * 0.84;
+  }
+
+  function svgXFromClient(e) {
+    var rect = svg.getBoundingClientRect();
+    var scale = vbW / rect.width;
+    return (e.clientX - rect.left) * scale;
+  }
+
+  function priceFromSvgX(svgX) {
+    return xlo + (svgX - pl) / cw * (xhi - xlo);
+  }
+
+  var hitArea = svg.querySelector('.dist-hit');
+  if (!hitArea) hitArea = svg;
+
+  hitArea.addEventListener('mousemove', function(e) {
+    var svgX = svgXFromClient(e);
+    var price = priceFromSvgX(svgX);
+    if (price < xlo || price > xhi) {
+      hide(); return;
+    }
+
+    // Move cursor
+    var cy = pdfY(price);
+    cursorLine.setAttribute('x1', svgX.toFixed(1));
+    cursorLine.setAttribute('x2', svgX.toFixed(1));
+    cursorDot.setAttribute('cx', svgX.toFixed(1));
+    cursorDot.setAttribute('cy', cy.toFixed(1));
+    cursorG.setAttribute('visibility', 'visible');
+
+    // Find nearest card within 4% of range
+    var tol = (xhi - xlo) * 0.04;
+    var nearest = null, bestDiff = Infinity;
+    for (var i = 0; i < cards.length; i++) {
+      var diff = Math.abs(cards[i].price_raw - price);
+      if (diff < bestDiff) { bestDiff = diff; nearest = cards[i]; }
+    }
+
+    var rect = svg.getBoundingClientRect();
+    var tipX = e.clientX - rect.left;
+    tooltip.style.left = tipX + 'px';
+    tooltip.style.top = '8px';
+    tooltip.removeAttribute('hidden');
+
+    if (nearest && bestDiff < tol) {
+      tooltip.innerHTML =
+        '<strong>$' + Math.round(nearest.price_raw).toLocaleString() + '</strong>' +
+        '<span class="dist-tip-carrier">' + nearest.carriers + '</span>' +
+        '<span class="dist-tip-hint">click to book</span>';
+      tooltip.dataset.link = nearest.booking_link;
+      tooltip.classList.add('dist-tooltip-flight');
+    } else {
+      tooltip.innerHTML =
+        '<span>~$' + Math.round(price).toLocaleString() + '</span>';
+      tooltip.dataset.link = '';
+      tooltip.classList.remove('dist-tooltip-flight');
+    }
+  });
+
+  hitArea.addEventListener('mouseleave', function() { hide(); });
+
+  hitArea.addEventListener('click', function() {
+    var link = tooltip.dataset && tooltip.dataset.link;
+    if (link && link !== '#' && link !== '') {
+      window.open(link, '_blank', 'noopener');
+    }
+  });
+
+  function hide() {
+    cursorG.setAttribute('visibility', 'hidden');
+    tooltip.setAttribute('hidden', '');
+    tooltip.dataset.link = '';
+  }
+})();
+</script>
 {% endblock %}
