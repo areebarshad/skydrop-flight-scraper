@@ -771,6 +771,18 @@ a:hover { text-decoration: underline; }
   color: var(--spike-color);
   border: 1px solid var(--spike-border);
 }
+.alert-banner {
+  padding: 12px 18px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  font-weight: 500;
+  backdrop-filter: blur(8px);
+}
+.alert-banner-warn {
+  background: rgba(245,158,11,0.12);
+  color: #b45309;
+  border: 1px solid rgba(245,158,11,0.35);
+}
 
 /* ── Settings Page ── */
 .settings-page { max-width: 960px; }

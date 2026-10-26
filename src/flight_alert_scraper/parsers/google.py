@@ -47,7 +47,13 @@ def _parse_price(text: str) -> Decimal:
 
 def _parse_card(card: Any, query: SearchQuery, scraped_at: datetime) -> FlightOption:
     """Parse a single result card node into a FlightOption."""
-    price_node = card.css_first("[data-gs]") or card.css_first(".YMlIz")
+    price_node = (
+        card.css_first(".YMlIz")
+        or card.css_first(".FpY5md")
+        or card.css_first("[data-gs]")
+        or card.css_first(".Cl8pke .gtkFwe")
+        or card.css_first('[aria-label*="$"]')
+    )
     if price_node is None:
         raise ValueError("No price node found")
     price_text = price_node.text(strip=True)
@@ -159,9 +165,9 @@ def parse_html(
     tree = HTMLParser(html)
     cards = (
         tree.css("li.pIav2d")
-        or tree.css("[data-gs]")
-        or tree.css(".itaKkb")
         or tree.css(".yR1fYc")
+        or tree.css(".itaKkb")
+        or tree.css("[data-gs]")
     )
 
     results: list[FlightOption] = []

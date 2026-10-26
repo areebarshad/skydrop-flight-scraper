@@ -74,7 +74,7 @@ def create_app(settings: Settings) -> FastAPI:
                 # even when the most recent scrape returned 0 results
                 price_history = get_price_history(session, key)
                 if price_history:
-                    best_price_raw = float(min(h["min_overall_price"] for h in price_history))
+                    best_price_raw = float(price_history[-1]["min_overall_price"])
                     best_price: str | None = f"${best_price_raw:,.0f}"
                     tier1_count = price_history[-1]["tier1_count"]
                 else:
@@ -383,6 +383,18 @@ def create_app(settings: Settings) -> FastAPI:
                 else []
             )
             price_history = get_price_history(session, query_key)
+
+            # Determine whether latest run found 0 flights, and fall back to
+            # the most recent run that did have results so the UI always shows
+            # the cheapest bookable fare from the last successful check.
+            no_current_flights: bool = bool(
+                latest_run and (latest_run.candidates_found or 0) == 0
+            )
+            using_fallback_data: bool = False
+            if no_current_flights and not snapshots and price_history:
+                fallback_run_id = price_history[-1]["run_id"]
+                snapshots = get_snapshots_for_run(session, fallback_run_id)
+                using_fallback_data = bool(snapshots)
             all_recent_runs = get_recent_runs(session, query_key, limit=20)
             recent_runs = [r for r in all_recent_runs if r.finished_at is not None]
             recent_alerts = get_recent_alerts(session, query_key)
@@ -463,6 +475,8 @@ def create_app(settings: Settings) -> FastAPI:
                 "ran": ran,
                 "chart_stats": chart_stats,
                 "ranked_cards_json": ranked_cards_json,
+                "no_current_flights": no_current_flights,
+                "using_fallback_data": using_fallback_data,
             },
         )
 

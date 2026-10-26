@@ -8,6 +8,17 @@
     <a class="btn btn-sm btn-glass" href="/logs">&#x2190; All flights</a>
   </div>
 
+  {% if no_current_flights %}
+  <div class="alert-banner alert-banner-warn" style="margin-bottom:16px">
+    <strong>No flights found in the latest check.</strong>
+    {% if using_fallback_data %}
+    Showing the most recent available fares from the last successful run below.
+    {% else %}
+    No historical data available. Run another check to try again.
+    {% endif %}
+  </div>
+  {% endif %}
+
   <!-- Page Header -->
   <div class="page-header">
     <div>
@@ -196,7 +207,11 @@
     </div>
     {% if chart_stats %}
     <div class="chart-stats-row">
-      <span class="chart-stat"><span class="chart-stat-label">Best fare</span> <strong>{{ chart_stats.best }}</strong></span>
+      <span class="chart-stat"><span class="chart-stat-label">Current fare</span> <strong>{{ chart_stats.best }}</strong></span>
+      {% if chart_stats.hist_best_differs %}
+      <span class="chart-stat-sep">·</span>
+      <span class="chart-stat"><span class="chart-stat-label">Hist. best</span> {{ chart_stats.hist_best }}</span>
+      {% endif %}
       <span class="chart-stat-sep">·</span>
       <span class="chart-stat"><span class="chart-stat-label">Avg price</span> <strong>{{ chart_stats.mean }}</strong></span>
       <span class="chart-stat-sep">·</span>
@@ -233,7 +248,12 @@
     </div>
     {% if not ranked_cards %}
     <div class="glass-card">
+      {% if no_current_flights and not using_fallback_data %}
+      <p class="empty-state" style="color:var(--warn,#f59e0b);font-weight:600;">NO FLIGHTS AVAILABLE</p>
+      <p class="empty-state" style="margin-top:4px;font-size:13px;">The last check returned 0 results. Try running another check.</p>
+      {% else %}
       <p class="empty-state">No flight data yet. Run a check to populate.</p>
+      {% endif %}
     </div>
     {% else %}
     <div class="ranked-list">

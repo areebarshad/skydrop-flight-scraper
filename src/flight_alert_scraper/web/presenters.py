@@ -78,7 +78,7 @@ def compute_chart_stats(
     budget: Decimal,
     mode: str = "overall",
 ) -> dict[str, Any] | None:
-    """Return mean/std/best stats for displaying below the chart."""
+    """Return mean/std/current/hist_best stats for displaying below the chart."""
     if not history:
         return None
     raw_overall = [float(h["min_overall_price"]) for h in history]
@@ -90,10 +90,14 @@ def compute_chart_stats(
     mean = sum(prices) / n
     variance = sum((p - mean) ** 2 for p in prices) / (n - 1) if n > 1 else 0
     std = math.sqrt(variance) if variance > 0 else mean * 0.06
+    current = prices[-1]   # most recent run — reflects currently bookable fares
+    hist_min = min(prices)  # all-time low across all runs
     return {
         "mean": fmt_price(Decimal(str(round(mean))).quantize(Decimal("1"))),
         "std": fmt_price(Decimal(str(round(std))).quantize(Decimal("1"))),
-        "best": fmt_price(Decimal(str(round(min(prices)))).quantize(Decimal("1"))),
+        "best": fmt_price(Decimal(str(round(current))).quantize(Decimal("1"))),
+        "hist_best": fmt_price(Decimal(str(round(hist_min))).quantize(Decimal("1"))),
+        "hist_best_differs": hist_min < current * 0.999,
         "n": n,
     }
 
@@ -119,9 +123,10 @@ def build_price_distribution_svg(
     variance = sum((p - mean) ** 2 for p in prices) / (n - 1) if n > 1 else 0
     std = math.sqrt(variance) if variance > 0 else mean * 0.06
     budget_val = float(budget)
-    min_price = min(prices)
+    min_price = prices[-1]   # current run — the fare you can actually book now
+    hist_best = min(prices)  # all-time low shown separately if lower
 
-    x_lo = min(min_price, mean - 2.8 * std, budget_val) * 0.96
+    x_lo = min(min_price, hist_best, mean - 2.8 * std, budget_val) * 0.96
     x_hi = max(max(prices), mean + 2.8 * std, budget_val) * 1.04
     x_range = x_hi - x_lo or 1.0
 
@@ -226,15 +231,15 @@ def build_price_distribution_svg(
     # Data ticks
     for p in prices:
         xi = sx(p)
-        is_best = p == min_price
-        col = "rgba(16,185,129,0.85)" if is_best else "rgba(100,116,139,0.35)"
-        th = 8 if is_best else 4
+        is_current = p == min_price  # min_price = current run's price
+        col = "rgba(16,185,129,0.85)" if is_current else "rgba(100,116,139,0.35)"
+        th = 8 if is_current else 4
         parts.append(
             f'  <line x1="{xi:.1f}" y1="{baseline_y - th}" x2="{xi:.1f}" y2="{baseline_y + 2}" '
-            f'stroke="{col}" stroke-width="{2 if is_best else 1}" stroke-linecap="round"/>'
+            f'stroke="{col}" stroke-width="{2 if is_current else 1}" stroke-linecap="round"/>'
         )
 
-    # Best marker
+    # Current price marker (green)
     xi_cheap = sx(min_price)
     cy_best = curve_y(min_price)
     parts.append(
@@ -245,6 +250,19 @@ def build_price_distribution_svg(
         f'  <circle cx="{xi_cheap:.1f}" cy="{cy_best:.1f}" r="5" '
         f'fill="rgba(16,185,129,0.9)" stroke="rgba(255,255,255,0.85)" stroke-width="1.5"/>'
     )
+
+    # Historical best marker (grey) — only if meaningfully lower than current
+    if hist_best < min_price * 0.999:
+        xi_hb = sx(hist_best)
+        cy_hb = curve_y(hist_best)
+        parts.append(
+            f'  <line x1="{xi_hb:.1f}" y1="{cy_hb:.1f}" x2="{xi_hb:.1f}" y2="{baseline_y - 6}" '
+            f'stroke="rgba(148,163,184,0.45)" stroke-width="1" stroke-dasharray="3 2"/>'
+        )
+        parts.append(
+            f'  <circle cx="{xi_hb:.1f}" cy="{cy_hb:.1f}" r="3.5" '
+            f'fill="rgba(148,163,184,0.7)" stroke="rgba(255,255,255,0.6)" stroke-width="1"/>'
+        )
 
     # Mean dashed line
     xi_mean = sx(mean)
@@ -265,8 +283,11 @@ def build_price_distribution_svg(
             f'class="chart-label" fill="{color}">{txt}</text>'
         )
 
-    _lbl(f"best ${int(min_price):,}", xi_cheap, "rgba(16,185,129,0.8)")
+    _lbl(f"current ${int(min_price):,}", xi_cheap, "rgba(16,185,129,0.8)")
     _lbl(f"avg ${int(mean):,}", xi_mean)
+    if hist_best < min_price * 0.999:
+        xi_hb_lbl = sx(hist_best)
+        _lbl(f"hist. best ${int(hist_best):,}", xi_hb_lbl, "rgba(148,163,184,0.6)")
 
     # Interactive cursor group (JS will move/show these)
     parts.append(f'  <g id="dist-cursor" visibility="hidden" pointer-events="none">')
