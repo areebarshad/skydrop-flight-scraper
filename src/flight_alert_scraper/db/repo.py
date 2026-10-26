@@ -162,13 +162,13 @@ def list_watched_queries(session: Session) -> list[WatchedQuery]:
     return list(session.exec(stmt).all())
 
 
-def get_latest_run(session: Session, query_key: str) -> ScrapeRun | None:
-    stmt = (
-        select(ScrapeRun)
-        .where(ScrapeRun.query_key == query_key, ScrapeRun.status == "ok")
-        .order_by(ScrapeRun.started_at.desc())  # type: ignore[attr-defined]
-        .limit(1)
-    )
+def get_latest_run(
+    session: Session, query_key: str, require_ok: bool = True
+) -> ScrapeRun | None:
+    stmt = select(ScrapeRun).where(ScrapeRun.query_key == query_key)
+    if require_ok:
+        stmt = stmt.where(ScrapeRun.status == "ok")
+    stmt = stmt.order_by(ScrapeRun.started_at.desc()).limit(1)  # type: ignore[attr-defined]
     return session.exec(stmt).first()
 
 

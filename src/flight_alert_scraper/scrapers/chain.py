@@ -10,6 +10,7 @@ from flight_alert_scraper.scrapers.base import (
     BlockedError,
     ConfigError,
     FlightProvider,
+    NoResultsError,
     ParseError,
     ProviderError,
     TransientError,
@@ -23,6 +24,7 @@ class ProviderResult:
     provider: str
     results: list[FlightOption]
     error: str | None = None
+    error_type: str | None = None  # "no_results", "transient", "blocked", etc.
 
 
 @dataclass
@@ -35,6 +37,16 @@ class ChainMetrics:
             if r.results:
                 return r.provider
         return None
+
+    @property
+    def outcome(self) -> str:
+        """Derive run outcome: 'ok', 'no_results', or 'failed'."""
+        if any(r.results for r in self.attempts):
+            return "ok"
+        ran = [r for r in self.attempts if r.results or r.error is not None]
+        if ran and all(r.error_type == "no_results" for r in ran):
+            return "no_results"
+        return "failed"
 
 
 class ProviderChain:
@@ -76,6 +88,16 @@ class ProviderChain:
                     ProviderResult(provider=provider.name, results=[], error=str(exc))
                 )
                 raise
+            except NoResultsError as exc:
+                log.warning("Provider %s no results: %s", provider.name, exc)
+                metrics.attempts.append(
+                    ProviderResult(
+                        provider=provider.name,
+                        results=[],
+                        error=str(exc),
+                        error_type="no_results",
+                    )
+                )
             except (BlockedError, ParseError) as exc:
                 log.warning("Provider %s escalating: %s", provider.name, exc)
                 metrics.attempts.append(
@@ -84,7 +106,12 @@ class ProviderChain:
             except TransientError as exc:
                 log.warning("Provider %s transient error: %s", provider.name, exc)
                 metrics.attempts.append(
-                    ProviderResult(provider=provider.name, results=[], error=str(exc))
+                    ProviderResult(
+                        provider=provider.name,
+                        results=[],
+                        error=str(exc),
+                        error_type="transient",
+                    )
                 )
             except ProviderError as exc:
                 log.warning("Provider %s error: %s", provider.name, exc)

@@ -8,7 +8,7 @@ from flight_alert_scraper.db.repo import get_alert_state, get_recent_runs
 from flight_alert_scraper.runner import run_query
 from flight_alert_scraper.scrapers.chain import ProviderChain
 from flight_alert_scraper.scrapers.fixture import FixtureProvider
-from tests.conftest import make_direct_flight, make_query
+from tests.conftest import make_direct_flight, make_query  # noqa: F401
 
 
 class _CapturingNotifier:
@@ -84,6 +84,86 @@ def test_snapshots_written_after_run(in_memory_session):
     assert latest.id is not None
     snaps = get_snapshots_for_run(in_memory_session, latest.id)
     assert len(snaps) >= 1
+
+
+def test_render_timeout_chain_outcome() -> None:
+    """RenderTimeoutError from all providers → chain.outcome == 'failed'."""
+    from flight_alert_scraper.scrapers.base import RenderTimeoutError
+
+    class _TimeoutProvider:
+        name = "timeout_fixture"
+
+        def available(self) -> bool:
+            return True
+
+        def search(self, query):
+            raise RenderTimeoutError("simulated timeout")
+
+    chain = ProviderChain([_TimeoutProvider()])
+    _, metrics = chain.search(make_query())
+    assert metrics.outcome == "failed"
+
+
+def test_render_timeout_recorded_as_error(in_memory_session) -> None:
+    """RenderTimeoutError → run.status == 'error', not 'ok'."""
+    from flight_alert_scraper.scrapers.base import RenderTimeoutError
+
+    class _TimeoutProvider:
+        name = "timeout_fixture"
+
+        def available(self) -> bool:
+            return True
+
+        def search(self, query):
+            raise RenderTimeoutError("simulated timeout")
+
+    chain = ProviderChain([_TimeoutProvider()])
+    query = make_query()
+    run_query(query, chain, in_memory_session, None)
+
+    runs = get_recent_runs(in_memory_session, query.query_key)
+    assert len(runs) == 1
+    assert runs[0].status == "error"
+
+
+def test_no_results_chain_outcome() -> None:
+    """NoResultsError from all providers → chain.outcome == 'no_results'."""
+    from flight_alert_scraper.scrapers.base import NoResultsError
+
+    class _NoResultsProvider:
+        name = "no_results_fixture"
+
+        def available(self) -> bool:
+            return True
+
+        def search(self, query):
+            raise NoResultsError("simulated no results")
+
+    chain = ProviderChain([_NoResultsProvider()])
+    _, metrics = chain.search(make_query())
+    assert metrics.outcome == "no_results"
+
+
+def test_no_results_recorded_as_no_results(in_memory_session) -> None:
+    """NoResultsError → run.status == 'no_results'."""
+    from flight_alert_scraper.scrapers.base import NoResultsError
+
+    class _NoResultsProvider:
+        name = "no_results_fixture"
+
+        def available(self) -> bool:
+            return True
+
+        def search(self, query):
+            raise NoResultsError("simulated no results")
+
+    chain = ProviderChain([_NoResultsProvider()])
+    query = make_query()
+    run_query(query, chain, in_memory_session, None)
+
+    runs = get_recent_runs(in_memory_session, query.query_key)
+    assert len(runs) == 1
+    assert runs[0].status == "no_results"
 
 
 def test_snapshot_failure_does_not_break_run(in_memory_session):

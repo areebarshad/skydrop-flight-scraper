@@ -14,8 +14,14 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from flight_alert_scraper.models.flight import FlightOption
 from flight_alert_scraper.models.query import SearchQuery
-from flight_alert_scraper.parsers.google import parse_html
-from flight_alert_scraper.scrapers.base import BlockedError, ParseError, TransientError
+from flight_alert_scraper.parsers.google import classify_page, parse_html
+from flight_alert_scraper.scrapers.base import (
+    BlockedError,
+    NoResultsError,
+    ParseError,
+    RenderTimeoutError,
+    TransientError,
+)
 from flight_alert_scraper.scrapers.tfs import build_url
 
 log = logging.getLogger(__name__)
@@ -68,7 +74,11 @@ class GoogleHttpProvider:
 
     def _get_client(self) -> httpx.Client:
         if self._client is None:
+            from flight_alert_scraper.scrapers.proxy import next_proxy
+
             cookies = _load_cookies()
+            proxy_cfg = next_proxy()
+            proxy_url: str | None = proxy_cfg["server"] if proxy_cfg else None
             self._client = httpx.Client(
                 headers={
                     "User-Agent": _UA,
@@ -78,6 +88,7 @@ class GoogleHttpProvider:
                 http2=True,
                 follow_redirects=True,
                 timeout=30,
+                proxy=proxy_url,
             )
         return self._client
 
@@ -115,5 +126,10 @@ class GoogleHttpProvider:
         except ParseError:
             _save_artifact(html, "parse_error")
             raise
+        if not results:
+            state = classify_page(html)
+            if state == "no_results":
+                raise NoResultsError(f"Google HTTP: no results (state={state})")
+            raise RenderTimeoutError(f"Google HTTP: page not rendered (state={state})")
         log.info("google_http found %d results", len(results))
         return results

@@ -10,7 +10,7 @@ import logging
 import re
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, Literal
 
 from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
@@ -22,6 +22,8 @@ from flight_alert_scraper.scrapers.links import build_links
 
 log = logging.getLogger(__name__)
 
+PageState = Literal["results", "no_results", "not_rendered", "blocked"]
+
 _CONSENT_SIGNALS = [
     "consent.google.com",
     "before you continue",
@@ -29,12 +31,47 @@ _CONSENT_SIGNALS = [
     "unusual traffic",
 ]
 
+# Phrases that appear in rendered no-results DOM nodes
+_NO_RESULTS_TEXTS = ("no results returned", "no flights found", "0 results found")
+
+# Selectors for Google Flights no-results message containers
+_NO_RESULTS_SELECTORS = (
+    ".Bn5Dkd", ".eEQ9nd", ".ikfgkd", ".mz975d",
+    "h2", "h3",
+)
+
 _PRICE_RE = re.compile(r"[\$,]")
 
 
 def _is_consent_wall(html: str) -> bool:
     lower = html.lower()
     return any(signal in lower for signal in _CONSENT_SIGNALS)
+
+
+def _card_nodes(tree: HTMLParser) -> list[Any]:
+    """Return flight-card DOM nodes using the full selector cascade."""
+    return (
+        tree.css("li.pIav2d")
+        or tree.css(".yR1fYc")
+        or tree.css(".itaKkb")
+        or tree.css("[data-gs]")
+    )
+
+
+def classify_page(html: str) -> PageState:
+    """Classify a Google Flights page into one of four states."""
+    if _is_consent_wall(html):
+        return "blocked"
+    tree = HTMLParser(html)
+    if _card_nodes(tree):
+        return "results"
+    # Check rendered text of specific DOM nodes — avoids matching hidden/script text
+    for sel in _NO_RESULTS_SELECTORS:
+        for node in tree.css(sel):
+            txt = node.text(strip=True).lower()
+            if any(sig in txt for sig in _NO_RESULTS_TEXTS):
+                return "no_results"
+    return "not_rendered"
 
 
 def _parse_price(text: str) -> Decimal:
@@ -163,12 +200,7 @@ def parse_html(
         raise BlockedError("Google consent wall detected")
 
     tree = HTMLParser(html)
-    cards = (
-        tree.css("li.pIav2d")
-        or tree.css(".yR1fYc")
-        or tree.css(".itaKkb")
-        or tree.css("[data-gs]")
-    )
+    cards = _card_nodes(tree)
 
     results: list[FlightOption] = []
     for card in cards:

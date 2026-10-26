@@ -156,7 +156,9 @@ def run_query(
         updated_at=now,
     )
     save_alert_state(session, new_state)
-    finish_run(session, scrape_run, ranked, provider, "ok", diag)
+    _OUTCOME_STATUS = {"ok": "ok", "no_results": "no_results", "failed": "error"}
+    run_status = _OUTCOME_STATUS[metrics.outcome]
+    finish_run(session, scrape_run, ranked, provider, run_status, diag)
     try:
         assert scrape_run.id is not None
         from flight_alert_scraper.db.repo import save_snapshots

@@ -303,8 +303,8 @@
           </thead>
           <tbody>
           {% for run in recent_runs %}
-          <tr class="run-row{% if run.status == 'error' %} run-row-error{% endif %}"
-              title="{% if run.status == 'error' and run.error_message %}{{ run.error_message }}{% endif %}"
+          <tr class="run-row{% if run.status != 'ok' %} run-row-error{% endif %}"
+              title="{% if run.status != 'ok' and run.error_message %}{{ run.error_message }}{% endif %}"
               onclick="window.location='/logs/{{ query_key }}/runs/{{ run.id }}'"
               style="cursor:pointer">
             <td>{{ run.started_at.strftime("%Y-%m-%d %H:%M") }}</td>

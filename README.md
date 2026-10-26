@@ -205,6 +205,16 @@ ALERT_RECIPIENT=you@example.com      # Where alerts are delivered
 # ── Optional ──────────────────────────────────────────────────
 SERPAPI_KEY=                         # SerpApi key — leave blank to disable
 WATCHLIST_PATH=./watchlist.yaml      # Override the default watchlist location
+
+# ── Browser scraper knobs (bisect detection without code edits) ───────────────
+BROWSER_HEADLESS=true                # Set false to watch the browser window
+BROWSER_BLOCK_ASSETS=true            # Set false to disable media-file interception
+BROWSER_CHANNEL=                     # Set to "chrome" to use installed Chrome
+BROWSER_WAIT_SECONDS=90              # Polling budget before giving up on render
+
+# ── Proxy (leave blank to disable) ───────────────────────────────────────────
+PROXY_URL=                           # e.g. http://user:pass@proxy.host:8080
+PROXY_POOL=                          # Comma-separated list; round-robins over entries
 ```
 
 ---

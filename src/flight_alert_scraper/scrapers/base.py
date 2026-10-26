@@ -23,6 +23,14 @@ class ParseError(ProviderError):
     """HTML/JSON parse failed after retry — escalate."""
 
 
+class NoResultsError(ProviderError):
+    """Google returned zero itineraries — not a render failure, do not retry."""
+
+
+class RenderTimeoutError(TransientError):
+    """Page did not render results within the timeout — retry with fresh context."""
+
+
 class ConfigError(ProviderError):
     """Bad configuration — fail loud, do not escalate."""
 

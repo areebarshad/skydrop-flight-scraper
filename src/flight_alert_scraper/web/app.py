@@ -69,7 +69,7 @@ def create_app(settings: Settings) -> FastAPI:
                     continue
                 wq = session.get(WatchedQuery, key)
                 # Always query for latest_run — don't gate on wq existing in DB
-                latest_run = get_latest_run(session, key)
+                latest_run = get_latest_run(session, key, require_ok=False)
                 # Use full price history so we always show historical best price
                 # even when the most recent scrape returned 0 results
                 price_history = get_price_history(session, key)
@@ -375,7 +375,7 @@ def create_app(settings: Settings) -> FastAPI:
                 if wq is None:
                     raise HTTPException(404, f"Route {query_key!r} not found")
 
-            latest_run = get_latest_run(session, query_key)
+            latest_run = get_latest_run(session, query_key, require_ok=False)
             alert_state = get_alert_state(session, query_key)
             snapshots = (
                 get_snapshots_for_run(session, latest_run.id)

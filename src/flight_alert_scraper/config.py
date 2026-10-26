@@ -23,6 +23,16 @@ class Settings(BaseSettings):
     watchlist_path: Path = Field(default=Path("./watchlist.yaml"))
     dry_run: bool = False
 
+    # Browser scraper knobs — change without code edits to bisect detection issues
+    browser_headless: bool = True
+    browser_block_assets: bool = True
+    browser_channel: str = ""
+    browser_wait_seconds: int = 90
+
+    # Proxy — leave blank to disable
+    proxy_url: str = ""
+    proxy_pool: str = ""  # comma-separated list; takes precedence over proxy_url
+
     def load_queries(self) -> list[SearchQuery]:
         raw: dict[str, Any] = yaml.safe_load(self.watchlist_path.read_text())
         queries = []
