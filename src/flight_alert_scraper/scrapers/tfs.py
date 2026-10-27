@@ -110,4 +110,4 @@ def encode(query: SearchQuery) -> str:
 
 def build_url(query: SearchQuery) -> str:
     tfs = encode(query)
-    return f"https://www.google.com/travel/flights/search?tfs={tfs}&curr=USD&gl=us"
+    return f"https://www.google.com/travel/flights/search?tfs={tfs}&curr=USD&hl=en&gl=us"

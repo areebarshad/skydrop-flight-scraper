@@ -23,7 +23,8 @@ log = logging.getLogger(__name__)
 _USER_DATA = Path(".cache/browser_profile")
 _ARTIFACTS = Path("artifacts")
 
-_CARD_SELECTOR = "li.pIav2d, .yR1fYc"
+# Primary class-based selectors + aria-label fallback that survives class churn
+_CARD_SELECTOR = "li.pIav2d, .yR1fYc, [aria-label*='US dollars']"
 
 
 async def _fetch_async(
@@ -88,12 +89,19 @@ async def _fetch_async(
                 lambda route: route.abort(),
             )
 
-        await page.goto(url, wait_until="load", timeout=60000)
+        await page.goto(url, wait_until="domcontentloaded", timeout=60000)
 
-        # Polling wait loop — check for cards every second, nudge every 5 s
+        # Let the initial XHR batch settle (flight data arrives via batchexecute)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=9000)
+        except Exception:
+            pass  # timeout is normal on heavy pages; continue
+
+        # Polling wait loop — check for cards every second, nudge/retry every 5 s
         deadline = asyncio.get_event_loop().time() + wait_seconds
         page_state: PageState = "not_rendered"
         ticks = 0
+        _search_triggered = False
 
         while asyncio.get_event_loop().time() < deadline:
             count = await page.locator(_CARD_SELECTOR).count()
@@ -111,6 +119,22 @@ async def _fetch_async(
                 try:
                     await page.evaluate("window.scrollBy(0, 400)")
                     await page.wait_for_timeout(300)
+                except Exception:
+                    pass
+
+            # After 15 s still no cards: press Enter to re-trigger search
+            if ticks == 15 and not _search_triggered:
+                _search_triggered = True
+                try:
+                    await page.keyboard.press("Enter")
+                    await page.wait_for_timeout(2000)
+                    # Also try clicking any visible search/explore button
+                    for btn_sel in ('[aria-label*="Search"]', '[jsname="vLv7Lb"]'):
+                        btn = page.locator(btn_sel).first
+                        if await btn.count() > 0:
+                            await btn.click()
+                            await page.wait_for_timeout(2000)
+                            break
                 except Exception:
                     pass
 

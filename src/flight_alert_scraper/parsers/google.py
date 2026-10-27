@@ -49,13 +49,34 @@ def _is_consent_wall(html: str) -> bool:
 
 
 def _card_nodes(tree: HTMLParser) -> list[Any]:
-    """Return flight-card DOM nodes using the full selector cascade."""
-    return (
+    """Return flight-card DOM nodes using a cascade that survives class-name churn."""
+    # Prefer the li wrapper (one node per flight); fall back to inner card div.
+    # aria-label selector catches future renames as long as Google keeps accessibility text.
+    nodes = (
         tree.css("li.pIav2d")
         or tree.css(".yR1fYc")
         or tree.css(".itaKkb")
-        or tree.css("[data-gs]")
     )
+    if nodes:
+        return nodes
+    # Deduplicate: [aria-label*="US dollars"] matches the price badge inside each card;
+    # walk up to the nearest li ancestor so we get one node per flight.
+    seen_ids: set[int] = set()
+    cards: list[Any] = []
+    for price_node in tree.css('[aria-label*="US dollars"]'):
+        ancestor = price_node
+        for _ in range(8):  # walk at most 8 levels up
+            parent = ancestor.parent
+            if parent is None:
+                break
+            ancestor = parent
+            if ancestor.tag == "li":
+                nid = id(ancestor)
+                if nid not in seen_ids:
+                    seen_ids.add(nid)
+                    cards.append(ancestor)
+                break
+    return cards
 
 
 def classify_page(html: str) -> PageState:
