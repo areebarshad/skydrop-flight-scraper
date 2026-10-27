@@ -82,15 +82,22 @@ def _parse_price(text: str) -> Decimal:
         raise ValueError(f"Cannot parse price from {text!r}") from e
 
 
+def _find_price_node(card: Any) -> Any | None:
+    """Return the first node whose text looks like a price ($NNN)."""
+    for sel in (".YMlIz.FpEdX", ".FpY5md", "[data-gs]", ".Cl8pke .gtkFwe"):
+        n = card.css_first(sel)
+        if n and "$" in n.text(strip=True):
+            return n
+    # Fallback: any .YMlIz that contains a dollar sign
+    for n in card.css(".YMlIz"):
+        if "$" in n.text(strip=True):
+            return n
+    return None
+
+
 def _parse_card(card: Any, query: SearchQuery, scraped_at: datetime) -> FlightOption:
     """Parse a single result card node into a FlightOption."""
-    price_node = (
-        card.css_first(".YMlIz")
-        or card.css_first(".FpY5md")
-        or card.css_first("[data-gs]")
-        or card.css_first(".Cl8pke .gtkFwe")
-        or card.css_first('[aria-label*="$"]')
-    )
+    price_node = _find_price_node(card)
     if price_node is None:
         raise ValueError("No price node found")
     price_text = price_node.text(strip=True)
@@ -110,7 +117,12 @@ def _parse_card(card: Any, query: SearchQuery, scraped_at: datetime) -> FlightOp
     flight_nodes = card.css(".BbR8Ec") or card.css(".Ir0Voe .sSHqwe")
     flight_numbers = [n.text(strip=True) for n in flight_nodes if n.text(strip=True)]
 
-    stops_node = card.css_first(".EfT7Ae abbr") or card.css_first(".stops-count")
+    stops_node = (
+        card.css_first(".EfT7Ae abbr")
+        or card.css_first(".EfT7Ae")
+        or card.css_first(".VG3hNb")
+        or card.css_first(".stops-count")
+    )
     stops_text = stops_node.text(strip=True).lower() if stops_node else ""
     if "nonstop" in stops_text or stops_text == "0":
         stops = 0
@@ -153,8 +165,8 @@ def _parse_card(card: Any, query: SearchQuery, scraped_at: datetime) -> FlightOp
             leg_arr = datetime.fromtimestamp(
                 now.timestamp() + (i + 1) * leg_duration * 60, tz=UTC
             )
-            orig = query.origin if i == 0 else f"C{i:02d}"
-            dest = query.destination if i == stops else f"C{i+1:02d}"
+            orig = query.origin if i == 0 else f"ZZ{chr(64 + i)}"
+            dest = query.destination if i == stops else f"ZZ{chr(65 + i)}"
             fn = flight_numbers[i] if i < len(flight_numbers) else str(i)
             legs.append(
                 Leg(
