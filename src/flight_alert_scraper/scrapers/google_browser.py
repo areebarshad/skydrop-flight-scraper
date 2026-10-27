@@ -102,6 +102,7 @@ async def _fetch_async(
         page_state: PageState = "not_rendered"
         ticks = 0
         _search_triggered = False
+        _reload_clicked = False
 
         while asyncio.get_event_loop().time() < deadline:
             count = await page.locator(_CARD_SELECTOR).count()
@@ -116,6 +117,20 @@ async def _fetch_async(
                 if snap_state in ("no_results", "blocked"):
                     page_state = snap_state
                     break
+
+                # Detect Google's "something went wrong" error state and click Reload
+                # to retry the flight data XHR — this appears when the data request fails
+                if not _reload_clicked and ticks >= 5:
+                    try:
+                        reload_btn = page.locator('button:text("Reload")')
+                        if await reload_btn.count() > 0:
+                            log.info("google_browser: clicking Reload button at tick %d", ticks)
+                            await reload_btn.first.click()
+                            _reload_clicked = True
+                            await page.wait_for_timeout(6000)
+                    except Exception:
+                        pass
+
                 try:
                     await page.evaluate("window.scrollBy(0, 400)")
                     await page.wait_for_timeout(300)

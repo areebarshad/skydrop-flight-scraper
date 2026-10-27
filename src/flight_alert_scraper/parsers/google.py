@@ -37,8 +37,12 @@ _NO_RESULTS_TEXTS = ("no results returned", "no flights found", "0 results found
 # Selectors for Google Flights no-results message containers
 _NO_RESULTS_SELECTORS = (
     ".Bn5Dkd", ".eEQ9nd", ".ikfgkd", ".mz975d",
-    "h2", "h3",
+    "h2", "h3", ".HeMQ4",
 )
+
+# Phrases that indicate a transient XHR error (show Reload button) — not a real no-results
+_ERROR_TEXTS = ("something went wrong", "oops,")
+_ERROR_SELECTORS = (".RMAGXb",)
 
 _PRICE_RE = re.compile(r"[\$,]")
 
@@ -86,6 +90,13 @@ def classify_page(html: str) -> PageState:
     tree = HTMLParser(html)
     if _card_nodes(tree):
         return "results"
+    # Check for transient XHR error state (shows Reload button) before no-results,
+    # so we don't misclassify a backend error as a genuine zero-itinerary response.
+    for sel in _ERROR_SELECTORS:
+        for node in tree.css(sel):
+            txt = node.text(strip=True).lower()
+            if any(sig in txt for sig in _ERROR_TEXTS):
+                return "not_rendered"
     # Check rendered text of specific DOM nodes — avoids matching hidden/script text
     for sel in _NO_RESULTS_SELECTORS:
         for node in tree.css(sel):

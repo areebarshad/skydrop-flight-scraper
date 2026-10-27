@@ -356,6 +356,14 @@ a:hover { text-decoration: underline; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin 0.75s linear infinite; display: inline-block; vertical-align: middle; }
 
+/* ── Hourglass ── */
+@keyframes hourglass-flip {
+  0%,   28%  { transform: rotate(0deg);   }
+  48%,  78%  { transform: rotate(180deg); }
+  98%,  100% { transform: rotate(360deg); }
+}
+.hourglass { animation: hourglass-flip 2.8s cubic-bezier(0.45, 0, 0.55, 1) infinite; display: inline-block; vertical-align: middle; }
+
 #job-status { min-height: 20px; }
 
 .job-msg {
