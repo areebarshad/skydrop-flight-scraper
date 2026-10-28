@@ -486,7 +486,7 @@ def create_app(settings: Settings) -> FastAPI:
                 "cheapest_by_run": cheapest_by_run,
                 "cheapest_price_by_run": cheapest_price_by_run,
                 "current_sort": sort,
-                "dist_mode": dist_mode_safe,
+                "dist_mode": dist_mode if dist_mode in ("overall", "tier1") else "overall",
                 "ran": ran,
                 "chart_stats": chart_stats,
                 "ranked_cards_json": ranked_cards_json,
