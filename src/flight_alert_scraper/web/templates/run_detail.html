@@ -49,7 +49,11 @@
           &middot; {{ card.carriers }}
         </div>
         <div class="ranked-labels">
+          {% if card.tier > 0 %}
           <span class="badge badge-sm tier-badge-{{ card.tier }}">Tier {{ card.tier }}</span>
+          {% else %}
+          <span class="badge badge-sm tier-badge-0">candidate</span>
+          {% endif %}
           {% for lbl in card.labels %}
           <span class="badge badge-sm tier-badge-{{ card.tier }}">{{ lbl.replace("_", " ") }}</span>
           {% endfor %}

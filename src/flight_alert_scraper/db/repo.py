@@ -16,6 +16,8 @@ from flight_alert_scraper.db.tables import (
     UserSetting,
     WatchedQuery,
 )
+from flight_alert_scraper.engine.scoring import effective_cost
+from flight_alert_scraper.models.flight import FlightOption
 from flight_alert_scraper.models.query import SearchQuery
 from flight_alert_scraper.models.result import RankedResults, TieredMatch
 
@@ -130,28 +132,50 @@ def save_snapshots(
     query_key: str,
     ranked: RankedResults,
     observed_at: datetime,
+    all_options: list[FlightOption] | None = None,
 ) -> None:
-    best: dict[str, TieredMatch] = {}
+    # Build dict of ranked matches: signature → (tier, labels, effective_cost, option)
+    tiered: dict[str, TieredMatch] = {}
     for match in ranked.tier1 + ranked.tier2 + ranked.tier3:
         sig = match.option.signature
-        if sig not in best or int(match.tier) < int(best[sig].tier):
-            best[sig] = match
-    for match in best.values():
-        carriers = ",".join(
-            dict.fromkeys(leg.carrier_code for leg in match.option.legs)
+        if sig not in tiered or int(match.tier) < int(tiered[sig].tier):
+            tiered[sig] = match
+
+    # Collect every option to persist (ranked + any raw candidates not already tiered)
+    to_save: dict[str, tuple[FlightOption, int, list[str], object]] = {}
+    for match in tiered.values():
+        to_save[match.option.signature] = (
+            match.option,
+            int(match.tier),
+            [str(lbl) for lbl in match.labels],
+            match.effective_cost_usd,
         )
+
+    if all_options:
+        k = ranked.query.constraints.hourly_time_penalty_usd
+        # Dedupe by signature (keep lowest price per signature)
+        raw: dict[str, FlightOption] = {}
+        for opt in all_options:
+            if opt.signature not in to_save:
+                if opt.signature not in raw or opt.price_usd < raw[opt.signature].price_usd:
+                    raw[opt.signature] = opt
+        for sig, opt in raw.items():
+            to_save[sig] = (opt, 0, [], effective_cost(opt, k))
+
+    for sig, (opt, tier, labels, ec) in to_save.items():
+        carriers = ",".join(dict.fromkeys(leg.carrier_code for leg in opt.legs))
         snap = FlightSnapshot(
             run_id=run_id,
             query_key=query_key,
-            signature=match.option.signature,
-            price_usd=match.option.price_usd,
-            total_duration_minutes=match.option.total_duration_minutes,
-            stops=match.option.stops,
+            signature=sig,
+            price_usd=opt.price_usd,
+            total_duration_minutes=opt.total_duration_minutes,
+            stops=opt.stops,
             carriers=carriers,
-            tier=int(match.tier),
-            labels=json.dumps([str(lbl) for lbl in match.labels]),
-            effective_cost_usd=match.effective_cost_usd,
-            option_json=match.option.model_dump_json(),
+            tier=tier,
+            labels=json.dumps(labels),
+            effective_cost_usd=ec,
+            option_json=opt.model_dump_json(),
             observed_at=observed_at,
         )
         session.add(snap)
@@ -285,6 +309,12 @@ def set_user_setting(session: Session, key: str, value: str) -> None:
     else:
         session.add(UserSetting(key=key, value=value, updated_at=datetime.now(tz=UTC)))
     session.commit()
+
+
+def get_all_snapshot_prices(session: Session, query_key: str) -> list[float]:
+    """Every individual flight price ever scraped for this query (all runs, all tiers)."""
+    stmt = select(FlightSnapshot.price_usd).where(FlightSnapshot.query_key == query_key)
+    return [float(row) for row in session.exec(stmt).all()]
 
 
 def save_run_stats(

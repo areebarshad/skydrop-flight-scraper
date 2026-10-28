@@ -18,6 +18,7 @@ from flight_alert_scraper.db.engine import get_session
 from flight_alert_scraper.db.repo import (
     deactivate_watched_query,
     get_alert_state,
+    get_all_snapshot_prices,
     get_cheapest_carrier_by_run,
     get_cheapest_price_by_run,
     get_latest_run,
@@ -385,6 +386,7 @@ def create_app(settings: Settings) -> FastAPI:
                 else []
             )
             price_history = get_price_history(session, query_key)
+            all_snapshot_prices = get_all_snapshot_prices(session, query_key)
 
             # Determine whether latest run found 0 flights, and fall back to
             # the most recent run that did have results so the UI always shows
@@ -437,13 +439,18 @@ def create_app(settings: Settings) -> FastAPI:
         hero: dict[str, Any] | None = sorted(all_cards, key=lambda c: c["price_raw"])[0] if all_cards else None
         tier1_count = sum(1 for c in all_cards if c["tier"] == 1)
 
-        dist_mode_safe = dist_mode if dist_mode in ("overall", "tier1") else "overall"
+        # Current price = cheapest fare in the most recent run
+        _current_price: float = (
+            float(price_history[-1]["min_overall_price"]) if price_history else 0.0
+        )
         price_svg = (
-            build_price_distribution_svg(price_history, budget, mode=dist_mode_safe)
-            if len(price_history) >= 1
+            build_price_distribution_svg(all_snapshot_prices, _current_price, budget)
+            if all_snapshot_prices
             else None
         )
-        chart_stats = compute_chart_stats(price_history, budget, mode=dist_mode_safe)
+        chart_stats = compute_chart_stats(
+            all_snapshot_prices, _current_price, len(price_history)
+        )
         ranked_cards_json = json.dumps(
             [{"price_raw": c["price_raw"], "carriers": c["carriers"],
               "booking_link": c["booking_link"], "tier": c["tier"]} for c in all_cards]

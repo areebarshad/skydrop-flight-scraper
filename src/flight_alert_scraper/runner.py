@@ -166,7 +166,7 @@ def run_query(
     try:
         assert scrape_run.id is not None
         from flight_alert_scraper.db.repo import save_snapshots
-        save_snapshots(session, scrape_run.id, query.query_key, ranked, now)
+        save_snapshots(session, scrape_run.id, query.query_key, ranked, now, all_options=results)
     except Exception as _snap_exc:
         log.error("Failed to save snapshots: %s", _snap_exc)
 

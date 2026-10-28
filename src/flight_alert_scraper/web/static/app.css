@@ -660,6 +660,7 @@ a:hover { text-decoration: underline; }
   box-shadow: 0 16px 40px -8px rgba(0,102,255,0.14), inset 0 1px 0 0 rgba(255,255,255,0.95);
 }
 
+.tier-card-0 { border-left: 3px solid rgba(148,163,184,0.35); }
 .tier-card-1 { border-left: 3px solid var(--tier1); }
 .tier-card-2 { border-left: 3px solid var(--tier2); }
 .tier-card-3 { border-left: 3px solid var(--tier3); }
@@ -689,6 +690,11 @@ a:hover { text-decoration: underline; }
 }
 .badge-sm { font-size: 10px; padding: 2px 7px; }
 
+.tier-badge-0 {
+  background: rgba(148,163,184,0.08);
+  color: var(--text-muted);
+  border: 1px solid rgba(148,163,184,0.20);
+}
 .tier-badge-1 {
   background: var(--tier1-bg);
   color: var(--tier1);

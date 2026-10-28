@@ -70,6 +70,8 @@ def snapshot_to_card(snap: FlightSnapshot) -> dict[str, Any]:
         booking_link = opt.get("links", {}).get("google_search", "#")
     except Exception:
         pass
+    # tier=0 means an untiered raw candidate (scraped but didn't qualify for any tier)
+    tier_display = snap.tier if snap.tier > 0 else 0
     return {
         "signature": snap.signature,
         "price": fmt_price(snap.price_usd),
@@ -78,7 +80,7 @@ def snapshot_to_card(snap: FlightSnapshot) -> dict[str, Any]:
         "duration_raw": snap.total_duration_minutes,
         "stops": snap.stops,
         "carriers": _full_carrier_names(snap.option_json, snap.carriers),
-        "tier": snap.tier,
+        "tier": tier_display,
         "labels": labels,
         "effective_cost": fmt_price(snap.effective_cost_usd),
         "effective_raw": float(snap.effective_cost_usd),
@@ -87,55 +89,52 @@ def snapshot_to_card(snap: FlightSnapshot) -> dict[str, Any]:
 
 
 def compute_chart_stats(
-    history: list[PriceHistoryPoint],
-    budget: Decimal,
-    mode: str = "overall",
+    all_prices: list[float],
+    current_price: float,
+    n_runs: int,
 ) -> dict[str, Any] | None:
-    """Return mean/std/current/hist_best stats for displaying below the chart."""
-    if not history:
+    """Return mean/std/current/hist_best stats for displaying below the chart.
+
+    all_prices — every individual flight price ever scraped (all runs, all tiers).
+    current_price — cheapest fare in the most recent run.
+    n_runs — number of scrape runs completed so far.
+    """
+    if not all_prices:
         return None
-    raw_overall = [float(h["min_overall_price"]) for h in history]
-    raw_tier1 = [float(h["min_tier1_price"]) for h in history if h["min_tier1_price"] is not None]
-    prices = raw_tier1 if mode == "tier1" and raw_tier1 else raw_overall
-    if not prices:
-        return None
-    n = len(prices)
-    mean = sum(prices) / n
-    variance = sum((p - mean) ** 2 for p in prices) / (n - 1) if n > 1 else 0
+    n = len(all_prices)
+    mean = sum(all_prices) / n
+    variance = sum((p - mean) ** 2 for p in all_prices) / (n - 1) if n > 1 else 0
     std = math.sqrt(variance) if variance > 0 else mean * 0.06
-    current = prices[-1]   # most recent run — reflects currently bookable fares
-    hist_min = min(prices)  # all-time low across all runs
+    hist_min = min(all_prices)
     return {
         "mean": fmt_price(Decimal(str(round(mean))).quantize(Decimal("1"))),
         "std": fmt_price(Decimal(str(round(std))).quantize(Decimal("1"))),
-        "best": fmt_price(Decimal(str(round(current))).quantize(Decimal("1"))),
+        "best": fmt_price(Decimal(str(round(current_price))).quantize(Decimal("1"))),
         "hist_best": fmt_price(Decimal(str(round(hist_min))).quantize(Decimal("1"))),
-        "hist_best_differs": hist_min < current * 0.999,
-        "n": n,
+        "hist_best_differs": hist_min < current_price * 0.999,
+        "n": n_runs,
     }
 
 
 def build_price_distribution_svg(
-    history: list[PriceHistoryPoint],
+    all_prices: list[float],
+    current_price: float,
     budget: Decimal,
-    mode: str = "overall",
 ) -> str | None:
-    """Minimal bell-curve distribution chart — white background, thin crisp curve."""
-    if not history:
+    """Minimal bell-curve distribution chart — white background, thin crisp curve.
+
+    all_prices  — every individual flight price ever scraped (all runs, all tiers).
+    current_price — cheapest fare in the most recent run (marked with a green dot).
+    """
+    if not all_prices:
         return None
 
-    raw_overall = [float(h["min_overall_price"]) for h in history]
-    raw_tier1 = [float(h["min_tier1_price"]) for h in history if h["min_tier1_price"] is not None]
-
-    prices = raw_tier1 if mode == "tier1" and raw_tier1 else raw_overall
-    if not prices:
-        return None
-
+    prices = all_prices
     n = len(prices)
     mean = sum(prices) / n
     variance = sum((p - mean) ** 2 for p in prices) / (n - 1) if n > 1 else 0
     std = math.sqrt(variance) if variance > 0 else mean * 0.06
-    min_price = prices[-1]   # current run — the fare you can actually book now
+    min_price = current_price
     hist_best = min(prices)  # all-time low shown separately if lower
 
     # Symmetric range centred on the mean so the bell curve sits in the middle
@@ -173,7 +172,7 @@ def build_price_distribution_svg(
     fill_pts = curve_pts + [f"{sx(x_hi):.1f},{baseline_y}", f"{sx(x_lo):.1f},{baseline_y}"]
 
     ns = 'xmlns="http://www.w3.org/2000/svg"'
-    grad_id = f"cg{mode}"
+    grad_id = "cgdist"
     data_attrs = (
         f'data-xlo="{x_lo:.2f}" data-xhi="{x_hi:.2f}" '
         f'data-pl="{PL}" data-pt="{PT}" data-cw="{cw:.2f}" data-ch="{ch:.2f}" '
@@ -288,5 +287,9 @@ def build_price_distribution_svg(
 
 
 def build_price_svg(history: list[PriceHistoryPoint], budget: Decimal) -> str | None:
-    """Legacy alias — delegates to distribution chart."""
-    return build_price_distribution_svg(history, budget, mode="overall")
+    """Legacy alias — kept for any direct callers; no-ops to None when empty."""
+    if not history:
+        return None
+    prices = [float(h["min_overall_price"]) for h in history]
+    current = prices[-1]
+    return build_price_distribution_svg(prices, current, budget)
