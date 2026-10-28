@@ -4,7 +4,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 
 from sqlmodel import Session
@@ -13,8 +15,10 @@ from flight_alert_scraper.db.repo import (
     alert_already_sent,
     finish_run,
     get_alert_state,
+    get_price_history,
     log_alert,
     save_alert_state,
+    save_run_stats,
     start_run,
     upsert_watched_query,
 )
@@ -165,6 +169,26 @@ def run_query(
         save_snapshots(session, scrape_run.id, query.query_key, ranked, now)
     except Exception as _snap_exc:
         log.error("Failed to save snapshots: %s", _snap_exc)
+
+    try:
+        assert scrape_run.id is not None
+        price_hist = get_price_history(session, query.query_key)
+        if price_hist:
+            raw = [float(h["min_overall_price"]) for h in price_hist]
+            n = len(raw)
+            m = sum(raw) / n
+            variance = sum((p - m) ** 2 for p in raw) / (n - 1) if n > 1 else 0
+            s = math.sqrt(variance) if variance > 0 else m * 0.06
+            save_run_stats(
+                session,
+                scrape_run.id,
+                query.query_key,
+                Decimal(str(round(m, 2))),
+                Decimal(str(round(s, 2))),
+                n,
+            )
+    except Exception as _stats_exc:
+        log.error("Failed to save run stats: %s", _stats_exc)
 
 
 def _write_preview(subject: str, html_body: str, text_body: str) -> None:

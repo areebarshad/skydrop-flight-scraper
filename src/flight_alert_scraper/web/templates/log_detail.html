@@ -201,23 +201,43 @@
       </select>
     </div>
     {% if price_svg %}
-    <div class="glass-card chart-wrap chart-dark" style="position:relative">
+    <div class="glass-card chart-wrap chart-light" style="position:relative;padding:16px 16px 12px;">
       <div id="dist-chart-wrap">{{ price_svg | safe }}</div>
       <div id="dist-tooltip" class="dist-tooltip" hidden></div>
     </div>
     {% if chart_stats %}
-    <div class="chart-stats-row">
-      <span class="chart-stat"><span class="chart-stat-label">Current fare</span> <strong>{{ chart_stats.best }}</strong></span>
+    <div class="chart-key-row">
+      <div class="key-item">
+        <span class="key-dot key-dot-green"></span>
+        <span class="key-label">Current</span>
+        <strong class="key-val">{{ chart_stats.best }}</strong>
+      </div>
       {% if chart_stats.hist_best_differs %}
-      <span class="chart-stat-sep">·</span>
-      <span class="chart-stat"><span class="chart-stat-label">Hist. best</span> {{ chart_stats.hist_best }}</span>
+      <div class="key-item">
+        <span class="key-dot key-dot-gray"></span>
+        <span class="key-label">Hist. best</span>
+        <strong class="key-val">{{ chart_stats.hist_best }}</strong>
+      </div>
       {% endif %}
-      <span class="chart-stat-sep">·</span>
-      <span class="chart-stat"><span class="chart-stat-label">Avg price</span> <strong>{{ chart_stats.mean }}</strong></span>
-      <span class="chart-stat-sep">·</span>
-      <span class="chart-stat"><span class="chart-stat-label">Std dev</span> {{ chart_stats.std }}</span>
-      <span class="chart-stat-sep">·</span>
-      <span class="chart-stat"><span class="chart-stat-label">Runs</span> {{ chart_stats.n }}</span>
+      <div class="key-item">
+        <span class="key-line key-line-blue"></span>
+        <span class="key-label">Avg</span>
+        <strong class="key-val">{{ chart_stats.mean }}</strong>
+      </div>
+      <div class="key-item">
+        <span class="key-label">±σ</span>
+        <strong class="key-val">{{ chart_stats.std }}</strong>
+      </div>
+      {% if constraints.max_price_usd %}
+      <div class="key-item">
+        <span class="key-line key-line-red"></span>
+        <span class="key-label">Budget</span>
+        <strong class="key-val">${{ "{:,}".format(constraints.max_price_usd | int) }}</strong>
+      </div>
+      {% endif %}
+      <div class="key-item key-item-muted">
+        <span class="key-label">{{ chart_stats.n }} runs</span>
+      </div>
     </div>
     {% endif %}
     {% else %}
@@ -405,10 +425,13 @@
       if (diff < bestDiff) { bestDiff = diff; nearest = cards[i]; }
     }
 
-    var rect = svg.getBoundingClientRect();
-    var tipX = e.clientX - rect.left;
+    // Position tooltip above the cursor
+    var wrapEl = svg.closest('.chart-wrap') || svg.parentElement;
+    var wrapRect = wrapEl.getBoundingClientRect();
+    var tipX = e.clientX - wrapRect.left;
+    var tipY = e.clientY - wrapRect.top;
     tooltip.style.left = tipX + 'px';
-    tooltip.style.top = '8px';
+    tooltip.style.top = Math.max(4, tipY - 68) + 'px';
     tooltip.removeAttribute('hidden');
 
     if (nearest && bestDiff < tol) {

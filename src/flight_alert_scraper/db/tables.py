@@ -87,6 +87,18 @@ class AlertLog(SQLModel, table=True):
     delivery_error: str | None = None
 
 
+class RunStats(SQLModel, table=True):
+    __tablename__ = "run_stats"
+
+    id: int | None = Field(default=None, primary_key=True)
+    run_id: int = Field(foreign_key="scrape_run.id", unique=True, index=True)
+    query_key: str = Field(index=True)
+    mean_usd: Decimal
+    std_usd: Decimal
+    n_samples: int
+    computed_at: datetime
+
+
 class UserSetting(SQLModel, table=True):
     __tablename__ = "user_setting"
 

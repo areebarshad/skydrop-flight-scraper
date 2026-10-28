@@ -107,7 +107,7 @@ def build_price_distribution_svg(
     budget: Decimal,
     mode: str = "overall",
 ) -> str | None:
-    """Modern glassy bell-curve distribution chart."""
+    """Minimal bell-curve distribution chart — white background, thin crisp curve."""
     if not history:
         return None
 
@@ -130,8 +130,8 @@ def build_price_distribution_svg(
     x_hi = max(max(prices), mean + 2.8 * std, budget_val) * 1.04
     x_range = x_hi - x_lo or 1.0
 
-    W, H = 640, 190
-    PT, PR, PB, PL = 28, 28, 46, 36
+    W, H = 640, 170
+    PT, PR, PB, PL = 20, 24, 24, 32
     cw = W - PL - PR
     ch = H - PT - PB
     baseline_y = PT + ch
@@ -155,7 +155,6 @@ def build_price_distribution_svg(
 
     ns = 'xmlns="http://www.w3.org/2000/svg"'
     grad_id = f"cg{mode}"
-    glow_id = f"gw{mode}"
     data_attrs = (
         f'data-xlo="{x_lo:.2f}" data-xhi="{x_hi:.2f}" '
         f'data-pl="{PL}" data-pt="{PT}" data-cw="{cw:.2f}" data-ch="{ch:.2f}" '
@@ -166,26 +165,25 @@ def build_price_distribution_svg(
     parts = [f'<svg viewBox="0 0 {W} {H}" {ns} class="price-chart dist-chart" '
              f'style="cursor:crosshair;overflow:visible" {data_attrs}>']
 
-    # Defs: gradient + glow filter
+    # White background
+    parts.append(f'  <rect x="0" y="0" width="{W}" height="{H}" fill="white" rx="4"/>')
+
+    # Defs: gradient only (no glow filter)
     parts.append(f'''  <defs>
     <linearGradient id="{grad_id}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="rgba(0,120,255,0.38)"/>
-      <stop offset="75%" stop-color="rgba(0,80,200,0.12)"/>
-      <stop offset="100%" stop-color="rgba(0,60,180,0.02)"/>
+      <stop offset="0%" stop-color="rgba(0,102,255,0.10)"/>
+      <stop offset="80%" stop-color="rgba(0,102,255,0.02)"/>
+      <stop offset="100%" stop-color="rgba(0,102,255,0)"/>
     </linearGradient>
-    <filter id="{glow_id}" x="-10%" y="-30%" width="120%" height="160%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
   </defs>''')
 
-    # ±1 std band — subtle
+    # ±1 std band — very subtle
     x1s = sx(mean - std)
     x2s = sx(mean + std)
     parts.append(
         f'  <rect x="{x1s:.1f}" y="{PT}" width="{x2s - x1s:.1f}" height="{ch}" '
-        f'fill="rgba(0,100,255,0.04)" stroke="rgba(0,100,255,0.12)" '
-        f'stroke-width="0.5" stroke-dasharray="2 3" rx="2"/>'
+        f'fill="rgba(0,102,255,0.04)" stroke="rgba(0,102,255,0.08)" '
+        f'stroke-width="0.5" rx="2"/>'
     )
 
     # Fill under curve
@@ -193,49 +191,34 @@ def build_price_distribution_svg(
         f'  <polygon points="{" ".join(fill_pts)}" fill="url(#{grad_id})" stroke="none"/>'
     )
 
-    # Glow layer of curve
+    # Thin, crisp curve — no glow, no blur
     parts.append(
         f'  <polyline points="{" ".join(curve_pts)}" fill="none" '
-        f'stroke="rgba(0,140,255,0.45)" stroke-width="4" stroke-linejoin="round" '
-        f'filter="url(#{glow_id})"/>'
-    )
-    # Crisp curve on top
-    parts.append(
-        f'  <polyline points="{" ".join(curve_pts)}" fill="none" '
-        f'stroke="rgba(30,160,255,0.92)" stroke-width="1.8" stroke-linejoin="round"/>'
+        f'stroke="#0066FF" stroke-width="1.5" stroke-linejoin="round" opacity="0.80"/>'
     )
 
     # Baseline
     parts.append(
         f'  <line x1="{PL}" y1="{baseline_y}" x2="{W - PR}" y2="{baseline_y}" '
-        f'stroke="rgba(148,163,184,0.25)" stroke-width="1"/>'
+        f'stroke="rgba(0,0,0,0.08)" stroke-width="1"/>'
     )
 
-    # Budget line
+    # Budget line — solid, no dash
     if x_lo < budget_val < x_hi:
         xi_b = sx(budget_val)
         parts.append(
-            f'  <line x1="{xi_b:.1f}" y1="{PT + 4}" x2="{xi_b:.1f}" y2="{baseline_y}" '
-            f'stroke="rgba(244,63,94,0.55)" stroke-width="1.5" stroke-dasharray="5 3"/>'
-        )
-        bx_anchor = "middle"
-        if xi_b < PL + 50:
-            bx_anchor = "start"
-        elif xi_b > W - PR - 50:
-            bx_anchor = "end"
-        parts.append(
-            f'  <text x="{xi_b:.1f}" y="{H - 4}" text-anchor="{bx_anchor}" '
-            f'class="chart-label" fill="rgba(244,63,94,0.65)">budget ${int(budget_val):,}</text>'
+            f'  <line x1="{xi_b:.1f}" y1="{PT}" x2="{xi_b:.1f}" y2="{baseline_y}" '
+            f'stroke="rgba(244,63,94,0.50)" stroke-width="1"/>'
         )
 
     # Data ticks
     for p in prices:
         xi = sx(p)
-        is_current = p == min_price  # min_price = current run's price
-        col = "rgba(16,185,129,0.85)" if is_current else "rgba(100,116,139,0.35)"
+        is_current = p == min_price
+        col = "rgba(5,150,105,0.80)" if is_current else "rgba(100,116,139,0.20)"
         th = 8 if is_current else 4
         parts.append(
-            f'  <line x1="{xi:.1f}" y1="{baseline_y - th}" x2="{xi:.1f}" y2="{baseline_y + 2}" '
+            f'  <line x1="{xi:.1f}" y1="{baseline_y - th}" x2="{xi:.1f}" y2="{baseline_y}" '
             f'stroke="{col}" stroke-width="{2 if is_current else 1}" stroke-linecap="round"/>'
         )
 
@@ -244,11 +227,11 @@ def build_price_distribution_svg(
     cy_best = curve_y(min_price)
     parts.append(
         f'  <line x1="{xi_cheap:.1f}" y1="{cy_best:.1f}" x2="{xi_cheap:.1f}" y2="{baseline_y - 10}" '
-        f'stroke="rgba(16,185,129,0.5)" stroke-width="1" stroke-dasharray="3 2"/>'
+        f'stroke="rgba(5,150,105,0.35)" stroke-width="1"/>'
     )
     parts.append(
-        f'  <circle cx="{xi_cheap:.1f}" cy="{cy_best:.1f}" r="5" '
-        f'fill="rgba(16,185,129,0.9)" stroke="rgba(255,255,255,0.85)" stroke-width="1.5"/>'
+        f'  <circle cx="{xi_cheap:.1f}" cy="{cy_best:.1f}" r="4.5" '
+        f'fill="#059669" stroke="white" stroke-width="1.5"/>'
     )
 
     # Historical best marker (grey) — only if meaningfully lower than current
@@ -257,47 +240,29 @@ def build_price_distribution_svg(
         cy_hb = curve_y(hist_best)
         parts.append(
             f'  <line x1="{xi_hb:.1f}" y1="{cy_hb:.1f}" x2="{xi_hb:.1f}" y2="{baseline_y - 6}" '
-            f'stroke="rgba(148,163,184,0.45)" stroke-width="1" stroke-dasharray="3 2"/>'
+            f'stroke="rgba(100,116,139,0.30)" stroke-width="1"/>'
         )
         parts.append(
             f'  <circle cx="{xi_hb:.1f}" cy="{cy_hb:.1f}" r="3.5" '
-            f'fill="rgba(148,163,184,0.7)" stroke="rgba(255,255,255,0.6)" stroke-width="1"/>'
+            f'fill="#94A3B8" stroke="white" stroke-width="1.5"/>'
         )
 
-    # Mean dashed line
+    # Mean line — solid, thin, subtle
     xi_mean = sx(mean)
     parts.append(
-        f'  <line x1="{xi_mean:.1f}" y1="{PT + 2}" x2="{xi_mean:.1f}" y2="{baseline_y}" '
-        f'stroke="rgba(148,163,184,0.35)" stroke-width="1" stroke-dasharray="4 3"/>'
+        f'  <line x1="{xi_mean:.1f}" y1="{PT}" x2="{xi_mean:.1f}" y2="{baseline_y}" '
+        f'stroke="rgba(0,102,255,0.22)" stroke-width="1"/>'
     )
-
-    # X-axis labels
-    def _lbl(txt: str, lx: float, color: str = "rgba(100,116,139,0.7)") -> None:
-        anchor = "middle"
-        if lx < PL + 44:
-            anchor = "start"
-        elif lx > W - PR - 44:
-            anchor = "end"
-        parts.append(
-            f'  <text x="{lx:.1f}" y="{H - 4}" text-anchor="{anchor}" '
-            f'class="chart-label" fill="{color}">{txt}</text>'
-        )
-
-    _lbl(f"current ${int(min_price):,}", xi_cheap, "rgba(16,185,129,0.8)")
-    _lbl(f"avg ${int(mean):,}", xi_mean)
-    if hist_best < min_price * 0.999:
-        xi_hb_lbl = sx(hist_best)
-        _lbl(f"hist. best ${int(hist_best):,}", xi_hb_lbl, "rgba(148,163,184,0.6)")
 
     # Interactive cursor group (JS will move/show these)
     parts.append(f'  <g id="dist-cursor" visibility="hidden" pointer-events="none">')
     parts.append(
         f'    <line id="dist-cursor-vline" x1="0" y1="{PT}" x2="0" y2="{baseline_y}" '
-        f'stroke="rgba(255,255,255,0.55)" stroke-width="1" stroke-dasharray="3 2"/>'
+        f'stroke="rgba(0,0,0,0.18)" stroke-width="1"/>'
     )
     parts.append(
-        f'    <circle id="dist-cursor-dot" cx="0" cy="{PT}" r="4.5" '
-        f'fill="rgba(0,140,255,0.9)" stroke="rgba(255,255,255,0.85)" stroke-width="1.5"/>'
+        f'    <circle id="dist-cursor-dot" cx="0" cy="{PT}" r="4" '
+        f'fill="#0066FF" stroke="white" stroke-width="1.5"/>'
     )
     parts.append('  </g>')
 

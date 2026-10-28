@@ -11,6 +11,7 @@ from flight_alert_scraper.db.tables import (
     AlertLog,
     AlertState,
     FlightSnapshot,
+    RunStats,
     ScrapeRun,
     UserSetting,
     WatchedQuery,
@@ -283,6 +284,36 @@ def set_user_setting(session: Session, key: str, value: str) -> None:
         session.add(existing)
     else:
         session.add(UserSetting(key=key, value=value, updated_at=datetime.now(tz=UTC)))
+    session.commit()
+
+
+def save_run_stats(
+    session: Session,
+    run_id: int,
+    query_key: str,
+    mean_usd: Decimal,
+    std_usd: Decimal,
+    n_samples: int,
+) -> None:
+    now = datetime.now(tz=UTC)
+    existing = session.exec(select(RunStats).where(RunStats.run_id == run_id)).first()
+    if existing is not None:
+        existing.mean_usd = mean_usd
+        existing.std_usd = std_usd
+        existing.n_samples = n_samples
+        existing.computed_at = now
+        session.add(existing)
+    else:
+        session.add(
+            RunStats(
+                run_id=run_id,
+                query_key=query_key,
+                mean_usd=mean_usd,
+                std_usd=std_usd,
+                n_samples=n_samples,
+                computed_at=now,
+            )
+        )
     session.commit()
 
 

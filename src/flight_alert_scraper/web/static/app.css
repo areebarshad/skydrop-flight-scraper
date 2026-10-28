@@ -1259,13 +1259,13 @@ a:hover { text-decoration: underline; }
   border-radius: 4px;
 }
 
-/* Chart dark card */
-.chart-dark {
-  background: linear-gradient(135deg, rgba(8,20,46,0.78) 0%, rgba(4,12,32,0.72) 100%) !important;
-  border-color: rgba(0,100,255,0.18) !important;
-  box-shadow: 0 16px 40px -8px rgba(0,50,180,0.28), inset 0 1px 0 0 rgba(0,120,255,0.18) !important;
+/* Chart light card */
+.chart-light {
+  background: white !important;
+  border-color: rgba(0,0,0,0.06) !important;
+  box-shadow: 0 4px 16px -4px rgba(0,0,0,0.06), inset 0 1px 0 0 rgba(255,255,255,0.9) !important;
 }
-.chart-dark .chart-label { fill: rgba(180,200,230,0.65) !important; }
+.chart-light .chart-label { fill: var(--text-muted) !important; }
 
 /* Chart stats row */
 .chart-stats-row {
@@ -1296,44 +1296,90 @@ a:hover { text-decoration: underline; }
 /* Dist chart tooltip */
 .dist-tooltip {
   position: absolute;
-  top: 8px;
   pointer-events: none;
   transform: translateX(-50%);
-  background: rgba(8,18,42,0.88);
-  border: 1px solid rgba(0,120,255,0.3);
-  border-radius: 10px;
-  padding: 7px 12px;
+  background: white;
+  border: 1px solid rgba(0,0,0,0.10);
+  border-radius: 8px;
+  padding: 6px 11px;
   font-size: 12px;
-  color: rgba(200,220,255,0.9);
-  backdrop-filter: blur(16px);
-  box-shadow: 0 8px 24px -4px rgba(0,50,200,0.35);
+  color: var(--text-primary);
+  box-shadow: 0 4px 16px -2px rgba(0,0,0,0.12);
   white-space: nowrap;
   display: flex;
   flex-direction: column;
   gap: 2px;
   z-index: 10;
-  transition: opacity 0.1s ease;
+  transition: opacity 0.08s ease;
 }
 .dist-tooltip strong {
   font-family: 'JetBrains Mono', monospace;
   font-size: 14px;
   font-weight: 700;
-  color: rgba(100,200,255,0.95);
+  color: var(--text-primary);
 }
 .dist-tip-carrier {
   font-size: 11px;
-  color: rgba(180,200,230,0.7);
+  color: var(--text-secondary);
 }
 .dist-tip-hint {
   font-size: 10px;
-  color: rgba(100,200,150,0.7);
+  color: var(--deal-color);
   font-weight: 600;
   letter-spacing: 0.04em;
 }
 .dist-tooltip-flight {
-  border-color: rgba(0,200,150,0.35);
+  border-color: rgba(5,150,105,0.25);
   cursor: pointer;
 }
+
+/* Chart key row (legend below chart) */
+.chart-key-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+  padding: 4px 2px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.key-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.key-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1.5px solid white;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.08);
+}
+.key-dot-green { background: #059669; }
+.key-dot-gray  { background: #94A3B8; }
+.key-line {
+  width: 14px;
+  height: 2px;
+  flex-shrink: 0;
+  border-radius: 1px;
+}
+.key-line-blue  { background: rgba(0,102,255,0.45); }
+.key-line-red   { background: rgba(244,63,94,0.55); }
+.key-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.key-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.key-item-muted .key-label { font-size: 11px; text-transform: none; letter-spacing: 0; }
 
 /* ── Airport Picker ── */
 .ap-wrap {
