@@ -29,7 +29,7 @@
       </div>
       <div class="last-checked">
         {% if latest_run %}
-          last checked {{ last_checked_str }} &middot; {{ latest_run.provider or "unknown" }}
+          last checked {{ last_checked_str }} &middot; {{ latest_run.provider | fmt_provider }}
         {% else %}
           never checked
         {% endif %}
@@ -135,7 +135,7 @@
         <div class="kpi-label">Last Checked</div>
         <div class="kpi-value" style="font-size:14px; letter-spacing: -0.02em;">{{ last_checked_str }}</div>
         {% if latest_run %}
-        <div class="kpi-sub">{{ latest_run.provider or "unknown" }}</div>
+        <div class="kpi-sub">{{ latest_run.provider | fmt_provider }}</div>
         {% endif %}
       </div>
     </div>
@@ -191,14 +191,6 @@
   <section class="section">
     <div class="section-header">
       <span class="section-title">Price distribution</span>
-      <select class="filter-select filter-select-sm"
-              onchange="window.location.href=this.value"
-              aria-label="Distribution mode">
-        <option value="?dist_mode=overall&sort={{ current_sort }}{% if ran %}&ran={{ ran }}{% endif %}"
-          {% if dist_mode == 'overall' %}selected{% endif %}>All prices</option>
-        <option value="?dist_mode=tier1&sort={{ current_sort }}{% if ran %}&ran={{ ran }}{% endif %}"
-          {% if dist_mode == 'tier1' %}selected{% endif %}>Tier 1 only</option>
-      </select>
     </div>
     {% if price_svg %}
     <div class="glass-card chart-wrap chart-light" style="position:relative;padding:16px 16px 12px;">
@@ -350,7 +342,7 @@
   <div class="footer-strip">
     <span>candidates: {{ latest_run.candidates_found }}</span>
     <span>filtered: {{ latest_run.candidates_found - latest_run.tier1_count - latest_run.tier2_count }}</span>
-    <span>provider: {{ latest_run.provider or "—" }}</span>
+    <span>provider: {{ latest_run.provider | fmt_provider }}</span>
     {% if alert_state and alert_state.last_suppressed_reason %}
     <span class="suppressed">no email: {{ alert_state.last_suppressed_reason }}</span>
     {% endif %}

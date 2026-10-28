@@ -40,6 +40,7 @@ from flight_alert_scraper.web.presenters import (
     build_price_distribution_svg,
     build_price_svg,
     fmt_price,
+    fmt_provider,
     fmt_relative_time,
     snapshot_to_card,
     compute_chart_stats,
@@ -57,6 +58,7 @@ def create_app(settings: Settings) -> FastAPI:
 
     app.mount("/static", StaticFiles(directory=str(_HERE / "static")), name="static")
     templates = Jinja2Templates(directory=str(_HERE / "templates"))
+    templates.env.filters["fmt_provider"] = fmt_provider
 
     def _log_rows() -> list[dict[str, Any]]:
         raw_rows = load_watchlist_raw(settings.watchlist_path)
@@ -404,6 +406,12 @@ def create_app(settings: Settings) -> FastAPI:
             cheapest_price_by_run = {
                 rid: fmt_price(p) for rid, p in cheapest_price_by_run_raw.items()
             }
+
+        # Always refresh constraints from watchlist (source of truth for user config).
+        # The DB copy may be stale if the user edited watchlist.yaml since the last run.
+        _wq_live = _wq_from_watchlist(query_key)
+        if _wq_live is not None:
+            wq.constraints_json = _wq_live.constraints_json
 
         job_id: str | None = None
         job: dict | None = None

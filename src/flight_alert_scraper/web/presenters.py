@@ -10,6 +10,19 @@ from flight_alert_scraper.db.repo import PriceHistoryPoint
 from flight_alert_scraper.db.tables import FlightSnapshot
 
 
+_PROVIDER_LABELS: dict[str, str] = {
+    "google_http": "web",
+    "google_browser": "browser",
+    "serpapi": "serp",
+}
+
+
+def fmt_provider(provider: str | None) -> str:
+    if provider is None:
+        return "unknown"
+    return _PROVIDER_LABELS.get(provider, provider)
+
+
 def fmt_duration(minutes: int) -> str:
     h, m = divmod(minutes, 60)
     return f"{h}h {m}m" if m else f"{h}h"
@@ -122,12 +135,18 @@ def build_price_distribution_svg(
     mean = sum(prices) / n
     variance = sum((p - mean) ** 2 for p in prices) / (n - 1) if n > 1 else 0
     std = math.sqrt(variance) if variance > 0 else mean * 0.06
-    budget_val = float(budget)
     min_price = prices[-1]   # current run — the fare you can actually book now
     hist_best = min(prices)  # all-time low shown separately if lower
 
-    x_lo = min(min_price, hist_best, mean - 2.8 * std, budget_val) * 0.96
-    x_hi = max(max(prices), mean + 2.8 * std, budget_val) * 1.04
+    # Symmetric range centred on the mean so the bell curve sits in the middle
+    half = max(
+        abs(min_price - mean),
+        abs(hist_best - mean),
+        abs(max(prices) - mean),
+        3.0 * std,
+    ) * 1.10
+    x_lo = mean - half
+    x_hi = mean + half
     x_range = x_hi - x_lo or 1.0
 
     W, H = 640, 170
@@ -202,14 +221,6 @@ def build_price_distribution_svg(
         f'  <line x1="{PL}" y1="{baseline_y}" x2="{W - PR}" y2="{baseline_y}" '
         f'stroke="rgba(0,0,0,0.08)" stroke-width="1"/>'
     )
-
-    # Budget line — solid, no dash
-    if x_lo < budget_val < x_hi:
-        xi_b = sx(budget_val)
-        parts.append(
-            f'  <line x1="{xi_b:.1f}" y1="{PT}" x2="{xi_b:.1f}" y2="{baseline_y}" '
-            f'stroke="rgba(244,63,94,0.50)" stroke-width="1"/>'
-        )
 
     # Data ticks
     for p in prices:

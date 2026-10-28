@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat&logo=python&logoColor=white" alt="Python 3.12+"/>
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-0078D4?style=flat" alt="Platform"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=flat" alt="MIT License"/>
-  <img src="https://img.shields.io/badge/Tests-52%20passing-brightgreen?style=flat" alt="52 tests passing"/>
+  <img src="https://img.shields.io/badge/Tests-72%20passing-brightgreen?style=flat" alt="72 tests passing"/>
   <img src="https://img.shields.io/badge/Email-Gmail%20SMTP-EA4335?style=flat&logo=gmail&logoColor=white" alt="Gmail SMTP"/>
 </p>
 
@@ -29,9 +29,9 @@ Stop refreshing Google Flights manually. skydrop scrapes live flight data on a s
 | **Smart alert logic** | Immediate alert on a new Tier 1 or a price drop ≥ 5%; digest-only (max once per 24 hours) when only near-misses exist; silence otherwise |
 | **Provider fallback chain** | Fast HTTP-only scraper first → headless Chromium if blocked → optional SerpApi — fully automatic, no manual intervention |
 | **Anti-spam guarantee** | SQLite state tracking per route means the same flight never triggers two emails |
-| **Local web dashboard** | Built-in FastAPI dashboard at `localhost:8765` — review tiers, history, and alert state in a browser |
+| **Local web dashboard** | Built-in FastAPI dashboard at `localhost:8765` — review tiers, history, alert state, and a Gaussian price distribution chart in a browser |
 | **Dry-run preview** | Render the exact email HTML before sending a single real message |
-| **Fully offline tests** | All 52 tests run without network calls or SMTP — safe to run anywhere |
+| **Fully offline tests** | All 72 tests run without network calls or SMTP — safe to run anywhere |
 | **Zero dependencies on paid APIs** | SerpApi is optional; the free tier is fully functional |
 
 ---
@@ -365,7 +365,7 @@ uv run flight-alert-scraper history [QUERY_KEY] [OPTIONS]
 |---|---|
 | **Query Key** | First 8 chars of the route's SHA-256 key |
 | **Started** | UTC timestamp of the scrape |
-| **Provider** | Which data source succeeded (`google_http`, `google_browser`, `serpapi`) |
+| **Provider** | Which data source succeeded (`web`, `browser`, `serp`) |
 | **Status** | `ok`, `error`, or `no_results` |
 | **T1 / T2** | Count of Tier 1 and Tier 2 matches found |
 | **Suppressed** | Reason the last alert was suppressed (e.g., `within_24h`) |
@@ -505,18 +505,18 @@ Blends money and time into a single comparable number. A `$20/hour` penalty mean
 Providers are tried in order. If one fails or returns no usable data, the next is tried automatically.
 
 ```
-1. google_http      httpx + selectolax (fast, no browser)
+1. web (google_http)        httpx + selectolax (fast, no browser)
         │
         ▼ (on block / empty result)
-2. google_browser   patchright headless Chromium (full JS rendering)
+2. browser (google_browser) patchright headless Chromium (full JS rendering)
         │
         ▼ (only if SERPAPI_KEY is set)
-3. serpapi          SerpApi Google Flights endpoint (250 free searches/month)
+3. serp (serpapi)           SerpApi Google Flights endpoint (250 free searches/month)
 ```
 
-- **`google_http`** — fastest, uses no API quota.
-- **`google_browser`** — kicks in when Google blocks the HTTP request. Uses [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) (not playwright-stealth) to avoid fingerprint detection.
-- **`serpapi`** — opt-in. Set `SERPAPI_KEY` in `.env` to enable. Free tier gives 250 searches/month.
+- **web** — fastest, uses no API quota.
+- **browser** — kicks in when Google blocks the HTTP request. Uses [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) (not playwright-stealth) to avoid fingerprint detection.
+- **serp** — opt-in. Set `SERPAPI_KEY` in `.env` to enable. Free tier gives 250 searches/month.
 
 ---
 
@@ -632,7 +632,7 @@ uv run ruff check .                              # linting
 uv run mypy src                                  # type checking
 ```
 
-All 52 tests are offline — no network calls, no email sending. Fixtures are used for parser and ranking tests.
+All 72 tests are offline — no network calls, no email sending. Fixtures are used for parser and ranking tests.
 
 ---
 
@@ -672,8 +672,8 @@ flight-alert-scraper/
 │   │   └── diffing.py        ← detect meaningful state changes
 │   │
 │   ├── db/                   ← SQLite persistence (SQLModel)
-│   │   ├── tables.py         ← WatchedQuery, ScrapeRun, AlertState ORM models
-│   │   ├── repo.py           ← query helpers
+│   │   ├── tables.py         ← WatchedQuery, ScrapeRun, FlightSnapshot, RunStats, AlertState ORM models
+│   │   ├── repo.py           ← query helpers (includes save_run_stats for per-run Gaussian params)
 │   │   └── engine.py         ← get_session, migrate
 │   │
 │   ├── web/                  ← local FastAPI dashboard

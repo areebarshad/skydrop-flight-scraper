@@ -18,7 +18,7 @@
       {% endif %}
       <div class="last-checked">
         {{ run.started_at.strftime("%Y-%m-%d %H:%M") }}
-        &middot; {{ run.provider or "unknown" }}
+        &middot; {{ run.provider | fmt_provider }}
         &middot; T1: {{ run.tier1_count }} T2: {{ run.tier2_count }} / {{ run.candidates_found }} candidates
       </div>
       {% if run.error_message %}
